@@ -67,11 +67,11 @@ jobs:
           restore-keys: ${{ runner.os }}-m2
 
       - name: Maven build
-        run: mvn clean org.jacoco:jacoco-maven-plugin:prepare-agent install org.jacoco:jacoco-maven-plugin:report -Dorg.folio.inventory.storage.test.database=embedded
-      #  run: mvn clean org.jacoco:jacoco-maven-plugin:prepare-agent install -Dmaven.test.skip=true
+        #run: mvn clean org.jacoco:jacoco-maven-plugin:prepare-agent install org.jacoco:jacoco-maven-plugin:report -Dorg.folio.inventory.storage.test.database=embedded
+        run: mvn clean org.jacoco:jacoco-maven-plugin:prepare-agent install -Dmaven.test.skip=true
 
-      #- name: Maven test
-      #  run: mvn test org.jacoco:jacoco-maven-plugin:report -Dorg.folio.inventory.storage.test.database=embedded
+      - name: Maven test
+        run: mvn test org.jacoco:jacoco-maven-plugin:report -Dorg.folio.inventory.storage.test.database=embedded
 
       - name: SQ analyze
         env:
