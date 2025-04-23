@@ -3,52 +3,55 @@
 
   <artifactId>mod-inventory-storage</artifactId>
   <groupId>org.folio</groupId>
-  <version>27.2.0-SNAPSHOT</version>
+  <version>29.1.0-SNAPSHOT</version>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <ramlfiles_path>${basedir}/ramls/</ramlfiles_path>
-    <generate_routing_context>/instance-storage/instances,/instance-storage/instances/retrieve,/holdings-storage/holdings,/holdings-storage/holdings/retrieve,/item-storage/items,/record-bulk/ids,/oai-pmh-view/instances,/oai-pmh-view/updatedInstanceIds,/oai-pmh-view/enrichedInstances,/inventory-hierarchy/updated-instance-ids,/inventory-hierarchy/items-and-holdings,/inventory-view/instances</generate_routing_context>
+    <generate_routing_context>/instance-storage/instances,/instance-storage/instances/retrieve,/holdings-storage/holdings,/holdings-storage/holdings/retrieve,/item-storage/items,/item-storage/items/retrieve,/record-bulk/ids,/oai-pmh-view/instances,/oai-pmh-view/updatedInstanceIds,/oai-pmh-view/enrichedInstances,/inventory-hierarchy/updated-instance-ids,/inventory-hierarchy/items-and-holdings,/inventory-view/instances</generate_routing_context>
     <argLine />
 
-    <raml-module-builder-version>35.2.2</raml-module-builder-version> <!-- also update vertx.version -->
-    <vertx.version>4.5.9</vertx.version>
-    <marc4j.version>2.9.5</marc4j.version>
-    <aspectj.version>1.9.22.1</aspectj.version>
-    <folio-kafka-wrapper.version>3.1.1</folio-kafka-wrapper.version>
-    <caffeine.version>3.1.8</caffeine.version>
-    <lombok.version>1.18.34</lombok.version>
-    <snappy-java.version>1.1.10.6</snappy-java.version>
-    <commons-lang3.version>3.16.0</commons-lang3.version>
-    <log4j.version>2.23.1</log4j.version>
+    <raml-module-builder-version>35.4.0</raml-module-builder-version> <!-- also update vertx.version -->
+    <vertx.version>4.5.14</vertx.version>
+    <marc4j.version>2.9.6</marc4j.version>
+    <aspectj.version>1.9.24</aspectj.version>
+    <folio-kafka-wrapper.version>3.4.0-SNAPSHOT</folio-kafka-wrapper.version>
+    <caffeine.version>3.2.0</caffeine.version>
+    <lombok.version>1.18.38</lombok.version>
+    <snappy-java.version>1.1.10.7</snappy-java.version>
+    <commons-lang3.version>3.17.0</commons-lang3.version>
+    <log4j.version>2.24.3</log4j.version>
+    <folio-s3-client.version>2.4.0-SNAPSHOT</folio-s3-client.version>
 
-    <okapi-testing.version>6.0.2</okapi-testing.version>
-    <junit.version>5.11.0</junit.version>
-    <testcontainers.version>1.20.1</testcontainers.version>
-    <joda-time.version>2.12.7</joda-time.version>
+    <okapi-testing.version>6.2.1</okapi-testing.version>
+    <junit.version>5.12.2</junit.version>
+    <testcontainers.version>1.20.6</testcontainers.version>
+    <joda-time.version>2.14.0</joda-time.version>
     <hamcrest.version>3.0</hamcrest.version>
     <junit4.version>4.13.2</junit4.version>
     <mockito.version>5.2.0</mockito.version>
     <JUnitParams.version>1.1.1</JUnitParams.version>
-    <wiremock.version>3.9.1</wiremock.version>
-    <rest-assured.version>5.5.0</rest-assured.version>
-    <awaitility.version>4.2.2</awaitility.version>
-    <assertj.version>3.26.3</assertj.version>
+    <wiremock.version>3.12.1</wiremock.version>
+    <rest-assured.version>5.5.1</rest-assured.version>
+    <awaitility.version>4.3.0</awaitility.version>
+    <assertj.version>3.27.3</assertj.version>
+    <system-stubs-junit4.version>2.1.8</system-stubs-junit4.version>
 
-    <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+    <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
     <build-helper-maven-plugin.version>3.6.0</build-helper-maven-plugin.version>
     <properties-maven-plugin.version>1.2.1</properties-maven-plugin.version>
     <maven-release-plugin.version>3.1.1</maven-release-plugin.version>
-    <aspectj-maven-plugin.version>1.14</aspectj-maven-plugin.version>
+    <aspectj-maven-plugin.version>1.14.1</aspectj-maven-plugin.version>
     <maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
     <copy-rename-maven-plugin.version>1.0.1</copy-rename-maven-plugin.version>
     <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
-    <maven-surefire-plugin.version>3.3.1</maven-surefire-plugin.version>
-    <maven-checkstyle-plugin.version>3.4.0</maven-checkstyle-plugin.version>
-    <checkstyle.version>10.17.0</checkstyle.version>
-    <maven-failsafe-plugin.version>3.3.1</maven-failsafe-plugin.version>
-    <versions-maven-plugin.version>2.17.1</versions-maven-plugin.version>
+    <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
+    <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
+    <checkstyle.version>10.23.0</checkstyle.version>
+    <maven-failsafe-plugin.version>3.5.3</maven-failsafe-plugin.version>
+    <versions-maven-plugin.version>2.18.0</versions-maven-plugin.version>
+    <folio-module-descriptor-validator.version>1.0.1</folio-module-descriptor-validator.version>
   </properties>
 
   <dependencyManagement>
@@ -130,6 +133,11 @@
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
       <version>${commons-lang3.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.folio</groupId>
+      <artifactId>folio-s3-client</artifactId>
+      <version>${folio-s3-client.version}</version>
     </dependency>
 
     <!-- Test Dependencies  -->
@@ -228,6 +236,11 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>localstack</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>io.rest-assured</groupId>
       <artifactId>rest-assured</artifactId>
       <version>${rest-assured.version}</version>
@@ -255,6 +268,12 @@
       <artifactId>log4j-slf4j2-impl</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>  <!-- for mocking env variable -->
+      <groupId>uk.org.webcompere</groupId>
+      <artifactId>system-stubs-junit4</artifactId>
+      <version>${system-stubs-junit4.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -269,7 +288,7 @@
         <artifactId>maven-compiler-plugin</artifactId>
         <version>${maven-compiler-plugin.version}</version>
         <configuration>
-          <release>17</release>
+          <release>21</release>
           <encoding>UTF-8</encoding>
         </configuration>
       </plugin>
@@ -353,7 +372,7 @@
         <configuration>
           <verbose>true</verbose>
           <showWeaveInfo>false</showWeaveInfo>
-          <release>17</release>
+          <release>21</release>
           <XaddSerialVersionUID>true</XaddSerialVersionUID>
           <showWeaveInfo>true</showWeaveInfo>
           <aspectLibraries>
@@ -518,6 +537,9 @@
               <artifact>*:*</artifact>
               <excludes>
                 <exclude>**/Log4j2Plugins.dat</exclude>
+                <exclude>META-INF/*.SF</exclude>
+                <exclude>META-INF/*.DSA</exclude>
+                <exclude>META-INF/*.RSA</exclude>
               </excludes>
             </filter>
           </filters>
@@ -622,6 +644,19 @@
         </configuration>
       </plugin>
 
+      <plugin>
+        <groupId>org.folio</groupId>
+        <artifactId>folio-module-descriptor-validator</artifactId>
+        <version>${folio-module-descriptor-validator.version}</version>
+        <inherited>false</inherited>
+        <executions>
+          <execution>
+            <goals>
+              <goal>validate</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 

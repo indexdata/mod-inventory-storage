@@ -1,6 +1,6 @@
 #%RAML 1.0
 title: Inventory Storage View API
-version: v2.0
+version: v3.0
 protocols: [ HTTP, HTTPS ]
 baseUri: http://github.com/org/folio/mod-inventory-storage
 
@@ -29,3 +29,9 @@ resourceTypes:
     description: Get instances by id with their holdings and items
     is: [pageable, searchable: {description: "using CQL",
                       example: "title=\"*uproot*\""}]
+    queryParameters:
+      withBoundedItems:
+        description: Add "items" records that bounded with holdings of the parent instance
+        type: boolean
+        required: false
+        default: false

@@ -65,7 +65,7 @@ public class InstallUpgradeIT {
 
   @ClassRule(order = 1)
   public static final PostgreSQLContainer<?> POSTGRES =
-    new PostgreSQLContainer<>("postgres:12-alpine")
+    new PostgreSQLContainer<>("postgres:16-alpine")
       .withClasspathResourceMapping("lotus-23.0.0.sql", "/lotus-23.0.0.sql", BindMode.READ_ONLY)
       .withNetwork(NETWORK)
       .withNetworkAliases("mypostgres")
@@ -172,8 +172,8 @@ public class InstallUpgradeIT {
     setTenant("logtenant");
 
     given()
-      .header("X-Okapi-Request-Id", "987654321")
-      .header("X-Okapi-User-Id", "itsme")
+      .header(XOkapiHeaders.REQUEST_ID, "987654321")
+      .header(XOkapiHeaders.USER_ID, "itsme")
       .when()
       .get("/location-units/libraries")
       .then()

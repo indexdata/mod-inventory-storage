@@ -14,10 +14,6 @@ public class InterfaceUrls {
     return vertxUrl("/loan-types" + subPath);
   }
 
-  public static URL shelfLocationsStorageUrl(String subPath) {
-    return vertxUrl("/shelf-locations" + subPath);
-  }
-
   public static URL instanceTypesStorageUrl(String subPath) {
     return vertxUrl("/instance-types" + subPath);
   }
@@ -60,10 +56,6 @@ public class InterfaceUrls {
 
   public static URL instancesStorageUrl(String subPath) {
     return vertxUrl("/instance-storage/instances" + subPath);
-  }
-
-  public static URL instancesStorageBatchInstancesUrl(String subPath) {
-    return vertxUrl("/instance-storage/batch/instances" + subPath);
   }
 
   public static URL instancesStorageSyncUrl(String subPath) {
@@ -210,7 +202,6 @@ public class InterfaceUrls {
     return vertxUrl("/hrid-settings-storage/hrid-settings" + subPath);
   }
 
-  // TODO: These entries will be removed soon
   public static URL oaiPmhView(String subPath) {
     return vertxUrl("/oai-pmh-view/instances" + subPath);
   }
@@ -256,6 +247,10 @@ public class InterfaceUrls {
 
   public static URL migrationJobsUrl(String subPath) {
     return vertxUrl("/inventory-storage/migrations/jobs" + subPath);
+  }
+
+  public static URL instancesBulk() {
+    return vertxUrl("/instance-storage/instances/bulk");
   }
 
 }

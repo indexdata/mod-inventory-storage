@@ -27,7 +27,6 @@ import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.support.HttpClient;
 import org.folio.rest.support.Response;
 import org.folio.rest.support.ResponseHandler;
-import org.folio.rest.unit.ItemDamagedStatusApiUnitTest;
 import org.folio.services.CallNumberUtilsTest;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -48,7 +47,6 @@ import org.junit.runners.Suite;
   LoanTypeTest.class,
   MaterialTypeTest.class,
   ContributorTypesTest.class,
-  ShelfLocationsTest.class,
   LocationUnitTest.class,
   LocationsTest.class,
   ServicePointTest.class,
@@ -57,7 +55,6 @@ import org.junit.runners.Suite;
   InstanceRelationshipsTest.class,
   ReferenceTablesTest.class,
   ItemDamagedStatusApiTest.class,
-  ItemDamagedStatusApiUnitTest.class,
   ItemEffectiveLocationTest.class,
   HridSettingsStorageTest.class,
   HridSettingsStorageParameterizedTest.class,
@@ -91,6 +88,9 @@ import org.junit.runners.Suite;
   RetainLeadingZeroesMigrationScriptTest.class,
   StatisticalCodeTest.class,
   UpcIsmnMigrationScriptTest.class,
+  InstanceStorageInstancesBulkApiTest.class,
+  SubjectSourceTest.class,
+  SubjectTypeTest.class
 
   // These fail.
   //ReferenceTablesTest.class,

@@ -40,7 +40,6 @@ Version 2.0. See the file "[LICENSE](LICENSE)" for more information.
 * [Appendix 1 - Docker Information](#appendix-1---docker-information)
   * [When Using the Modules as Docker Containers](#when-using-the-modules-as-docker-containers)
     * [Finding a Routable Address](#finding-a-routable-address)
-* [Batch interface](#batch-interface)
 * [HRID Management](#hrid-management)
 * [Inventory view endpoint](#inventory-view-endpoint)
 * [Domain event pattern](#domain-event-pattern)
@@ -106,6 +105,7 @@ These properties can be changed by setting env variable.
 
 * `KAFKA_DOMAIN_TOPIC_NUM_PARTITIONS` Default value - `50`
 * `KAFKA_CLASSIFICATION_TYPE_TOPIC_NUM_PARTITIONS` Default value - `1`
+* `KAFKA_CALL_NUMBER_TYPE_TOPIC_NUM_PARTITIONS` Default value - `1`
 * `KAFKA_LOCATION_TOPIC_NUM_PARTITIONS` Default value - `1`
 * `KAFKA_LIBRARY_TOPIC_NUM_PARTITIONS` Default value - `1`
 * `KAFKA_CAMPUS_TOPIC_NUM_PARTITIONS` Default value - `1`
@@ -113,6 +113,20 @@ These properties can be changed by setting env variable.
 * `KAFKA_SUBJECT_TYPE_TOPIC_NUM_PARTITIONS` Default value - `1`
 * `KAFKA_REINDEX_RECORDS_TOPIC_NUM_PARTITIONS` Default value - `16`
 * `KAFKA_SUBJECT_SOURCE_TOPIC_NUM_PARTITIONS` Default value - `1`
+
+There is also possibility for customizing through properties the Kafka Topic
+`message retention` (in milliseconds) and `maximum message size` (in bytes). The default values of these configurations
+for any topic are 604800000 milliseconds (or 1 week) and 1048576 bytes (or 1 MB) respectively
+
+These are the defined topic properties for `message retention` and `maximum message size` for `reindex-records` topic
+
+* `KAFKA_REINDEX_RECORDS_TOPIC_MESSAGE_RETENTION` Default value - `86400000` (1 day)
+* `KAFKA_REINDEX_RECORDS_TOPIC_MAX_MESSAGE_SIZE` Default value - `10485760` (10 MB)
+
+in case, any of these topic properties are changed for `reindex-records` the topic needs to be recreated and module needs to be reinstalled.
+
+Changing maximum message size for kafka producer:
+* `KAFKA_REINDEX_PRODUCER_MAX_REQUEST_SIZE_BYTES` Default value - `10485760` (10 MB)
 
 # Building
 
@@ -128,6 +142,7 @@ These environment variables configure Kafka, for details see [Kafka](#kafka):
 * `REPLICATION_FACTOR`
 * `KAFKA_DOMAIN_TOPIC_NUM_PARTITIONS`
 * `KAFKA_CLASSIFICATION_TYPE_TOPIC_NUM_PARTITIONS`
+* `KAFKA_CALL_NUMBER_TYPE_TOPIC_NUM_PARTITIONS`
 * `KAFKA_SUBJECT_TYPE_TOPIC_NUM_PARTITIONS`
 * `KAFKA_REINDEX_RECORDS_TOPIC_NUM_PARTITIONS`
 * `KAFKA_SUBJECT_SOURCE_TOPIC_NUM_PARTITIONS`
@@ -135,6 +150,7 @@ These environment variables configure Kafka, for details see [Kafka](#kafka):
 
 These environment variables configure Kafka topic for specific business-related topics
 * `KAFKA_CLASSIFICATION_TYPE_TOPIC_NUM_PARTITIONS`
+* `KAFKA_CALL_NUMBER_TYPE_TOPIC_NUM_PARTITIONS`
 * `KAFKA_LOCATION_TOPIC_NUM_PARTITIONS`
 * `KAFKA_LIBRARY_TOPIC_NUM_PARTITIONS`
 * `KAFKA_CAMPUS_TOPIC_NUM_PARTITIONS`
@@ -142,6 +158,8 @@ These environment variables configure Kafka topic for specific business-related 
 * `KAFKA_SUBJECT_TYPE_TOPIC_NUM_PARTITIONS`
 * `KAFKA_REINDEX_RECORDS_TOPIC_NUM_PARTITIONS`
 * `KAFKA_SUBJECT_SOURCE_TOPIC_NUM_PARTITIONS`
+* `KAFKA_REINDEX_RECORDS_TOPIC_MESSAGE_RETENTION`
+* `KAFKA_REINDEX_RECORDS_TOPIC_MAX_MESSAGE_SIZE`
 
 mod-inventory-storage also supports all Raml Module Builder (RMB) environment variables,
 for details see [RMB](https://github.com/folio-org/raml-module-builder#environment-variables):
@@ -162,6 +180,15 @@ for details see [RMB](https://github.com/folio-org/raml-module-builder#environme
 * `DB_RECONNECTINTERVAL`
 * `DB_EXPLAIN_QUERY_THRESHOLD`
 * `DB_ALLOW_SUPPRESS_OPTIMISTIC_LOCKING`
+
+These environment variables configure the module interaction with S3-compatible storage (AWS S3, Minio Server):
+* `S3_URL` (default value - `http://127.0.0.1:9000`)
+* `S3_REGION`
+* `S3_BUCKET` (default value - `marc-migrations`)
+* `S3_ACCESS_KEY_ID`
+* `S3_SECRET_ACCESS_KEY`
+* `S3_IS_AWS` (default value - `false`)
+* `ECS_TLR_FEATURE_ENABLED` (default value - `false`)
 
 # Local Deployment using Docker
 
@@ -314,27 +341,6 @@ If these methods don't work for you, please do get in touch, so this section can
 On Linux, `ifconfig docker0 | grep 'inet addr:'` should give output similar to `inet addr:192.168.X.X  Bcast:0.0.0.0  Mask:255.255.0.0`, , the first IP address is usually routable from within containers.
 
 On Mac OS X (using Docker Native), `ifconfig en0 | grep 'inet '` should give output similar to `inet 192.168.X.X netmask 0xffffff00 broadcast 192.168.X.X`, the first IP address is usually routable from within containers.
-
-# Batch interface
-
-Batch interface was introduced for processing a collection of entities in bulk. It is not transactional, each entity is processed separately, response contains combined results of processing.
-
-###Design for batch save Instances endpoint
-_Method_: POST
-
-_Resource_: /instance-storage/batch/instances (interface "instance-storage-batch")
-
-_Body_: collection of Instances and total number of Instances
-
-_Returns_: collection of successfully created Instances, error messages for failure Instances, total number of created Instances:
-
-- If at least one Instance is successfully saved - returns 201 response with saved instances ("instances" section), "errorMessages" array contains errors for failed Instances (empty if all Instances are successfully saved).
-
-- If save for all Instances failed - returns 500 response with "errorMessages" array, explaining a reason of why Instances were processed with failures (one error message per one Instance). Instances array is empty.
-
-Regardless the batch size, number of parallel connections to the db is limited to 4 by default. To override the default number of concurrent db connections - "inventory.storage.parallel.db.connections.limit" program argument should be specified on module deployment.
-
-`java -Dport=%p -jar ../mod-source-record-storage/mod-source-record-storage-server/target/mod-source-record-storage-server-fat.jar -Dhttp.port=%p embed_postgres=true inventory.storage.parallel.db.connections.limit=10`
 
 # HRID Management
 

@@ -3,7 +3,6 @@ package org.folio.services.caches;
 import static io.vertx.core.Future.failedFuture;
 import static io.vertx.core.Future.succeededFuture;
 import static io.vertx.core.http.HttpMethod.GET;
-import static java.net.HttpURLConnection.HTTP_FORBIDDEN;
 import static java.net.HttpURLConnection.HTTP_OK;
 import static org.folio.okapi.common.XOkapiHeaders.TENANT;
 import static org.folio.okapi.common.XOkapiHeaders.URL;
@@ -34,8 +33,8 @@ public class ConsortiumDataCache {
   private static final Logger LOG = LogManager.getLogger(ConsortiumDataCache.class);
   private static final String EXPIRATION_TIME_PARAM = "cache.consortium-data.expiration.time.seconds";
   private static final String DEFAULT_EXPIRATION_TIME_SECONDS = "300";
-  private static final String USER_TENANTS_PATH = "/user-tenants?limit=1"; //NOSONAR
-  private static final String CONSORTIUM_TENANTS_PATH = "/consortia/%s/tenants"; //NOSONAR
+  private static final String USER_TENANTS_PATH = "/user-tenants?limit=1";
+  private static final String CONSORTIUM_TENANTS_PATH = "/consortia/%s/tenants";
   private static final String USER_TENANTS_FIELD = "userTenants";
   private static final String CONSORTIUM_TENANTS_FIELD = "tenants";
   private static final String CENTRAL_TENANT_ID_FIELD = "centralTenantId";
@@ -86,7 +85,7 @@ public class ConsortiumDataCache {
   private CompletableFuture<Optional<ConsortiumData>> loadConsortiumData(String tenantId, Map<String, String> headers) {
     var request = getHttpRequest(headers, USER_TENANTS_PATH);
 
-    return getResponse(tenantId, request)
+    return getResponse(request)
       .compose(responseBody -> {
         if (responseBody.isEmpty()) {
           return succeededFuture(Optional.<ConsortiumData>empty());
@@ -100,17 +99,17 @@ public class ConsortiumDataCache {
         JsonObject userTenant = userTenants.getJsonObject(0);
         var centralTenantId = userTenant.getString(CENTRAL_TENANT_ID_FIELD);
         var consortiumId = userTenant.getString(CONSORTIUM_ID_FIELD);
-        return loadConsortiumTenants(consortiumId, tenantId, headers)
+        return loadConsortiumTenants(consortiumId, headers)
           .map(memberTenants -> Optional.of(new ConsortiumData(centralTenantId, consortiumId, memberTenants)));
       })
       .toCompletionStage()
       .toCompletableFuture();
   }
 
-  private Future<List<String>> loadConsortiumTenants(String consortiumId, String tenantId,
+  private Future<List<String>> loadConsortiumTenants(String consortiumId,
                                                      Map<String, String> headers) {
     var request = getHttpRequest(headers, CONSORTIUM_TENANTS_PATH.formatted(consortiumId));
-    return getResponse(tenantId, request)
+    return getResponse(request)
       .map(responseBody -> responseBody.map(entries -> entries.getJsonArray(CONSORTIUM_TENANTS_FIELD)
         .stream()
         .map(o -> ((JsonObject) o).mapTo(ConsortiumTenant.class))
@@ -123,23 +122,24 @@ public class ConsortiumDataCache {
 
   private HttpRequest<Buffer> getHttpRequest(Map<String, String> headers, String path) {
     String okapiUrl = headers.get(URL);
+    if (okapiUrl == null) {
+      LOG.error("getHttpRequest:: Okapi URL is not specified in headers");
+      throw new IllegalArgumentException("Okapi URL is not specified in headers");
+    }
     WebClient client = WebClient.wrap(httpClient);
     HttpRequest<Buffer> request = client.requestAbs(GET, okapiUrl + path);
     headers.forEach(request::putHeader);
     return request;
   }
 
-  private Future<Optional<JsonObject>> getResponse(String tenantId, HttpRequest<Buffer> request) {
-    LOG.info("getResponse:: Try to request method='{}' uri='{}'", request.method().name(), request.uri());
+  private Future<Optional<JsonObject>> getResponse(HttpRequest<Buffer> request) {
+    var methodName = request.method().name();
+    var requestUri = request.uri();
+    LOG.info("getResponse:: Try to request method='{}' uri='{}'", methodName, requestUri);
     return request.send().compose(response -> {
-      if (response.statusCode() == HTTP_FORBIDDEN) {
-        LOG.info("loadConsortiumData:: Skipping for tenant {} because {} returns 403 (forbidden)",
-          tenantId, USER_TENANTS_PATH);
-        return succeededFuture(Optional.empty());
-      }
       if (response.statusCode() != HTTP_OK) {
         String msg = String.format("Failed to request method='%s' uri='%s', status='%s', body='%s'",
-          request.method().name(), request.uri(), response.statusCode(), response.bodyAsString());
+          methodName, requestUri, response.statusCode(), response.bodyAsString());
         LOG.warn("getResponse:: {}", msg);
         return failedFuture(msg);
       }

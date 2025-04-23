@@ -2,14 +2,15 @@ package org.folio.services.domainevent;
 
 import static io.vertx.core.Future.succeededFuture;
 import static org.folio.InventoryKafkaTopic.HOLDINGS_RECORD;
+import static org.folio.InventoryKafkaTopic.REINDEX_RECORDS;
 import static org.folio.rest.tools.utils.TenantTool.tenantId;
+import static org.folio.utils.Environment.getKafkaProducerMaxRequestSize;
 
 import io.vertx.core.Context;
 import io.vertx.core.Future;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.folio.persist.HoldingsRepository;
@@ -19,18 +20,22 @@ import org.folio.rest.jaxrs.model.PublishReindexRecords;
 public class HoldingDomainEventPublisher
   extends AbstractDomainEventPublisher<HoldingsRecord, HoldingsRecord> {
 
+  private final CommonDomainEventPublisher<Map<String, Object>> holdingsReindexPublisher;
+
   public HoldingDomainEventPublisher(Context context, Map<String, String> okapiHeaders) {
     super(new HoldingsRepository(context, okapiHeaders),
       new CommonDomainEventPublisher<>(context, okapiHeaders,
         HOLDINGS_RECORD.fullTopicName(tenantId(okapiHeaders))));
+    holdingsReindexPublisher = new CommonDomainEventPublisher<>(context, okapiHeaders,
+      REINDEX_RECORDS.fullTopicName(tenantId(okapiHeaders)), getKafkaProducerMaxRequestSize());
   }
 
-  public Future<Void> publishReindexHoldings(String key, List<HoldingsRecord> holdings) {
-    if (CollectionUtils.isEmpty(holdings) || StringUtils.isBlank(key)) {
+  public Future<Void> publishReindexHoldings(String key, List<Map<String, Object>> holdings) {
+    if (StringUtils.isBlank(key)) {
       return succeededFuture();
     }
 
-    return domainEventService.publishReindexRecords(key, PublishReindexRecords.RecordType.HOLDING, holdings);
+    return holdingsReindexPublisher.publishReindexRecords(key, PublishReindexRecords.RecordType.HOLDINGS, holdings);
   }
 
   @Override
@@ -38,7 +43,7 @@ public class HoldingDomainEventPublisher
     Collection<HoldingsRecord> holdingsRecords) {
 
     return succeededFuture(holdingsRecords.stream()
-      .map(hr -> pair(hr.getInstanceId(), hr))
+      .map(hr -> pair(hr.getId(), hr))
       .toList());
   }
 

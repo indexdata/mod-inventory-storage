@@ -5,6 +5,7 @@ import static io.vertx.core.Promise.promise;
 import static java.util.Objects.isNull;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.apache.commons.lang3.StringUtils.isNotBlank;
+import static org.apache.logging.log4j.LogManager.getLogger;
 import static org.folio.dbschema.ObjectMapperTool.readValue;
 import static org.folio.rest.impl.HoldingsStorageApi.HOLDINGS_RECORD_TABLE;
 import static org.folio.rest.impl.ItemStorageApi.ITEM_TABLE;
@@ -21,9 +22,12 @@ import static org.folio.rest.persist.PgUtil.postgresClient;
 import static org.folio.rest.persist.PostgresClient.pojo2JsonObject;
 import static org.folio.rest.support.CollectionUtil.deepCopy;
 import static org.folio.services.batch.BatchOperationContextFactory.buildBatchOperationContext;
+import static org.folio.utils.ComparisonUtils.equalsIgnoringMetadata;
 import static org.folio.validator.HridValidators.refuseWhenHridChanged;
 import static org.folio.validator.NotesValidators.refuseLongNotes;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
@@ -42,6 +46,8 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.ws.rs.core.Response;
+import org.apache.logging.log4j.Logger;
+import org.folio.dbschema.ObjectMapperTool;
 import org.folio.okapi.common.XOkapiHeaders;
 import org.folio.persist.HoldingsRepository;
 import org.folio.persist.ItemRepository;
@@ -49,8 +55,6 @@ import org.folio.rest.jaxrs.model.CirculationNote;
 import org.folio.rest.jaxrs.model.HoldingsRecord;
 import org.folio.rest.jaxrs.model.Item;
 import org.folio.rest.jaxrs.model.Metadata;
-import org.folio.rest.persist.Criteria.Criteria;
-import org.folio.rest.persist.Criteria.Criterion;
 import org.folio.rest.persist.PgExceptionUtil;
 import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.persist.PostgresClientFuturized;
@@ -65,10 +69,16 @@ import org.folio.validator.CommonValidators;
 import org.folio.validator.NotesValidators;
 
 public class ItemService {
+
+  private static final Logger log = getLogger(ItemService.class);
+  private static final ObjectMapper OBJECT_MAPPER = ObjectMapperTool.getMapper();
   private static final Pattern KEY_ALREADY_EXISTS_PATTERN = Pattern.compile(
     ": Key \\(([^=]+)\\)=\\((.*)\\) already exists.$");
   private static final Pattern KEY_NOT_PRESENT_PATTERN = Pattern.compile(
     ": Key \\(([^=]+)\\)=\\((.*)\\) is not present in table \"(.*)\".$");
+  private static final String INSTANCE_ID_WITH_ITEM_JSON = """
+    {"instanceId": "%s",%s
+    """;
 
   private final HridManager hridManager;
   private final ItemEffectiveValuesService effectiveValuesService;
@@ -91,30 +101,6 @@ public class ItemService {
     domainEventService = new ItemDomainEventPublisher(vertxContext, okapiHeaders);
     itemRepository = new ItemRepository(vertxContext, okapiHeaders);
     holdingsRepository = new HoldingsRepository(vertxContext, okapiHeaders);
-  }
-
-  private static Response putFailure(Throwable e) {
-    String msg = PgExceptionUtil.badRequestMessage(e);
-    if (msg == null) {
-      msg = e.getMessage();
-    }
-    if (PgExceptionUtil.isVersionConflict(e)) {
-      return PutItemStorageItemsByItemIdResponse.respond409WithTextPlain(msg);
-    }
-    Matcher matcher = KEY_NOT_PRESENT_PATTERN.matcher(msg);
-    if (matcher.find()) {
-      String field = matcher.group(1);
-      String value = matcher.group(2);
-      String refTable = matcher.group(3);
-      msg = "Cannot set item " + field + " = " + value
-        + " because it does not exist in " + refTable + ".id.";
-    } else {
-      matcher = KEY_ALREADY_EXISTS_PATTERN.matcher(msg);
-      if (matcher.find()) {
-        msg = matcher.group(1) + " value already exists in table item: " + matcher.group(2);
-      }
-    }
-    return PutItemStorageItemsByItemIdResponse.respond400WithTextPlain(msg);
   }
 
   public Future<Response> createItem(Item entity) {
@@ -146,7 +132,7 @@ public class ItemService {
       .compose(NotesValidators::refuseItemLongNotes)
       .compose(result -> effectiveValuesService.populateEffectiveValues(items))
       .compose(this::populateCirculationNoteId)
-      .compose(result -> buildBatchOperationContext(upsert, items, itemRepository, Item::getId))
+      .compose(result -> buildBatchOperationContext(upsert, items, itemRepository, Item::getId, true))
       .compose(batchOperation -> postSync(ITEM_TABLE, items, MAX_ENTITIES, upsert, optimisticLocking,
         okapiHeaders, vertxContext, PostItemStorageBatchSynchronousResponse.class)
         .onSuccess(domainEventService.publishCreatedOrUpdated(batchOperation)))
@@ -174,12 +160,20 @@ public class ItemService {
       .compose(oldHoldings -> {
         putData.oldHoldings = oldHoldings;
         effectiveValuesService.populateEffectiveValues(newItem, putData.newHoldings);
-        return doUpdateItem(newItem);
+        try {
+          var noChanges = equalsIgnoringMetadata(putData.oldItem, newItem);
+          if (noChanges) {
+            return Future.succeededFuture();
+          } else {
+            return doUpdateItem(newItem)
+              .onSuccess(finalItem -> domainEventService.publishUpdated(
+                finalItem, putData.oldItem, putData.newHoldings, putData.oldHoldings));
+          }
+        } catch (Exception e) {
+          return Future.failedFuture(e);
+        }
       })
-      .onSuccess(finalItem ->
-        domainEventService.publishUpdated(finalItem, putData.oldItem, putData.newHoldings, putData.oldHoldings))
-      .<Response>map(x -> PutItemStorageItemsByItemIdResponse.respond204())
-      ;
+      .map(x -> PutItemStorageItemsByItemIdResponse.respond204());
   }
 
   public Future<Response> deleteItem(String itemId) {
@@ -209,8 +203,18 @@ public class ItemService {
     // https://sonarcloud.io/organizations/folio-org/rules?open=java%3AS1602&rule_key=java%3AS1602
     return itemRepository.delete(cql)
       .onSuccess(rowSet -> vertxContext.runOnContext(runLater ->
-        rowSet.iterator().forEachRemaining(row ->
-          domainEventService.publishRemoved(row.getString(0), row.getString(1))
+        rowSet.iterator().forEachRemaining(row -> {
+            try {
+              var instanceIdAndItemRaw = INSTANCE_ID_WITH_ITEM_JSON.formatted(
+                row.getString(0), row.getString(1).substring(1));
+              var itemId = OBJECT_MAPPER.readTree(row.getString(1)).get("id").textValue();
+
+              domainEventService.publishRemoved(itemId, instanceIdAndItemRaw);
+            } catch (JsonProcessingException ex) {
+              log.error("deleteItems:: Failed to parse json : {}", ex.getMessage(), ex);
+              throw new IllegalArgumentException(ex.getCause());
+            }
+          }
         )
       ))
       .map(Response.noContent().build());
@@ -240,27 +244,44 @@ public class ItemService {
         .map(items));
   }
 
-  public Future<Void> publishReindexItemRecords(String rangeId, String idStart, String idEnd) {
-    var criteriaFrom = new Criteria().setJSONB(false)
-      .addField("id").setOperation(">=").setVal(idStart);
-    var criteriaTo = new Criteria().setJSONB(false)
-      .addField("id").setOperation("<=").setVal(idEnd);
-    final Criterion criterion = new Criterion(criteriaFrom)
-      .addCriterion(criteriaTo);
-
-    return itemRepository.get(criterion)
+  public Future<Void> publishReindexItemRecords(String rangeId, String fromId, String toId) {
+    return itemRepository.getReindexItemRecords(fromId, toId)
       .compose(items -> domainEventService.publishReindexItems(rangeId, items));
+  }
+
+  private static Response putFailure(Throwable e) {
+    String msg = PgExceptionUtil.badRequestMessage(e);
+    if (msg == null) {
+      msg = e.getMessage();
+    }
+    if (PgExceptionUtil.isVersionConflict(e)) {
+      return PutItemStorageItemsByItemIdResponse.respond409WithTextPlain(msg);
+    }
+    Matcher matcher = KEY_NOT_PRESENT_PATTERN.matcher(msg);
+    if (matcher.find()) {
+      String field = matcher.group(1);
+      String value = matcher.group(2);
+      String refTable = matcher.group(3);
+      msg = "Cannot set item " + field + " = " + value
+            + " because it does not exist in " + refTable + ".id.";
+    } else {
+      matcher = KEY_ALREADY_EXISTS_PATTERN.matcher(msg);
+      if (matcher.find()) {
+        msg = matcher.group(1) + " value already exists in table item: " + matcher.group(2);
+      }
+    }
+    return PutItemStorageItemsByItemIdResponse.respond400WithTextPlain(msg);
   }
 
   private static boolean isItemFieldsAffected(HoldingsRecord holdingsRecord, Item item) {
     return isBlank(item.getItemLevelCallNumber()) && isNotBlank(holdingsRecord.getCallNumber())
-      || isBlank(item.getItemLevelCallNumberPrefix()) && isNotBlank(holdingsRecord.getCallNumberPrefix())
-      || isBlank(item.getItemLevelCallNumberSuffix()) && isNotBlank(holdingsRecord.getCallNumberSuffix())
-      || isBlank(item.getItemLevelCallNumberTypeId()) && isNotBlank(holdingsRecord.getCallNumberTypeId())
-      || isNull(item.getPermanentLocationId())
-          && isNull(item.getTemporaryLocationId())
-          && (!isNull(holdingsRecord.getTemporaryLocationId())
-          || !isNull(holdingsRecord.getPermanentLocationId()));
+           || isBlank(item.getItemLevelCallNumberPrefix()) && isNotBlank(holdingsRecord.getCallNumberPrefix())
+           || isBlank(item.getItemLevelCallNumberSuffix()) && isNotBlank(holdingsRecord.getCallNumberSuffix())
+           || isBlank(item.getItemLevelCallNumberTypeId()) && isNotBlank(holdingsRecord.getCallNumberTypeId())
+           || isNull(item.getPermanentLocationId())
+              && isNull(item.getTemporaryLocationId())
+              && (!isNull(holdingsRecord.getTemporaryLocationId())
+                  || !isNull(holdingsRecord.getPermanentLocationId()));
   }
 
   private Future<RowSet<Row>> updateEffectiveCallNumbersAndLocation(
@@ -294,10 +315,10 @@ public class ItemService {
 
   private Future<PutData> getItemAndHolding(String itemId, String holdingsId) {
     String sql = "SELECT item.jsonb::text, holdings_record.jsonb::text "
-      + "FROM " + postgresClientFuturized.getFullTableName(ITEM_TABLE) + " "
-      + "LEFT JOIN " + postgresClientFuturized.getFullTableName(HOLDINGS_RECORD_TABLE)
-      + "  ON holdings_record.id = $2 "
-      + "WHERE item.id = $1";
+                 + "FROM " + postgresClientFuturized.getFullTableName(ITEM_TABLE) + " "
+                 + "LEFT JOIN " + postgresClientFuturized.getFullTableName(HOLDINGS_RECORD_TABLE)
+                 + "  ON holdings_record.id = $2 "
+                 + "WHERE item.id = $1";
     return postgresClient.execute(sql, Tuple.of(itemId, holdingsId))
       .compose(rowSet -> {
         if (rowSet.size() == 0) {

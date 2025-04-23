@@ -14,7 +14,6 @@ import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import java.net.MalformedURLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -127,7 +126,7 @@ public final class LocationUtility {
     putIfNotNull(request, "campusId", camp);
     putIfNotNull(request, "libraryId", lib);
     putIfNotNull(request, "code", code);
-    putIfNotNull(request, "primaryServicePoint", servicePoints.get(0));
+    putIfNotNull(request, "primaryServicePoint", servicePoints.getFirst());
     putIfNotNull(request, "isActive", "true");
     UUID spId = UUID.randomUUID();
     SERVICE_POINT_IDS.add(spId);
@@ -137,18 +136,10 @@ public final class LocationUtility {
     return get(createLocation);
   }
 
-  /**
-   * Helper to create a Location record the way old shelfLocations were created.
-   * Used mostly while migrating to new Locations
-   */
   public static UUID createLocation(UUID id, String name, String code) {
     return createLocation(id, name, code, TENANT_ID);
   }
 
-  /**
-   * Helper to create a Location record the way old shelfLocations were created.
-   * Used mostly while migrating to new Locations
-   */
   public static UUID createLocation(UUID id, String name, String code, String tenantId) {
     if (id == null) {
       id = UUID.randomUUID();
@@ -181,37 +172,37 @@ public final class LocationUtility {
   public static Response createServicePoint(UUID id, String name, String code,
                                             String discoveryDisplayName, String description, Integer shelvingLagTime,
                                             Boolean pickupLocation, HoldShelfExpiryPeriod shelfExpiryPeriod)
-    throws MalformedURLException, InterruptedException, ExecutionException, TimeoutException {
+    throws InterruptedException, ExecutionException, TimeoutException {
 
     return createServicePoint(id, name, code, discoveryDisplayName, description,
-      shelvingLagTime, pickupLocation, shelfExpiryPeriod, Collections.emptyList(), TENANT_ID);
+      shelvingLagTime, pickupLocation, shelfExpiryPeriod, Collections.emptyList(), null, TENANT_ID);
   }
 
   public static Response createServicePoint(UUID id, String name, String code,
                                             String discoveryDisplayName, String description, Integer shelvingLagTime,
                                             Boolean pickupLocation, HoldShelfExpiryPeriod shelfExpiryPeriod,
                                             String tenantId)
-    throws MalformedURLException, InterruptedException, ExecutionException, TimeoutException {
+    throws InterruptedException, ExecutionException, TimeoutException {
 
     return createServicePoint(id, name, code, discoveryDisplayName, description,
-      shelvingLagTime, pickupLocation, shelfExpiryPeriod, Collections.emptyList(), tenantId);
+      shelvingLagTime, pickupLocation, shelfExpiryPeriod, Collections.emptyList(), null, tenantId);
   }
 
   public static Response createServicePoint(UUID id, String name, String code,
                                             String discoveryDisplayName, String description, Integer shelvingLagTime,
                                             Boolean pickupLocation, HoldShelfExpiryPeriod shelfExpiryPeriod,
                                             List<StaffSlip> slips)
-    throws MalformedURLException, InterruptedException, ExecutionException, TimeoutException {
+    throws InterruptedException, ExecutionException, TimeoutException {
 
     return createServicePoint(id, name, code, discoveryDisplayName, description, shelvingLagTime, pickupLocation,
-      shelfExpiryPeriod, slips, TENANT_ID);
+      shelfExpiryPeriod, slips, null, TENANT_ID);
   }
 
   public static Response createServicePoint(UUID id, String name, String code,
                                             String discoveryDisplayName, String description, Integer shelvingLagTime,
                                             Boolean pickupLocation, HoldShelfExpiryPeriod shelfExpiryPeriod,
-                                            List<StaffSlip> slips, String tenantId)
-    throws MalformedURLException, InterruptedException, ExecutionException, TimeoutException {
+                                            List<StaffSlip> slips, Boolean ecsRequestRouting, String tenantId)
+    throws InterruptedException, ExecutionException, TimeoutException {
 
     final CompletableFuture<Response> createServicePoint = new CompletableFuture<>();
     JsonObject request = new JsonObject();
@@ -219,6 +210,9 @@ public final class LocationUtility {
       .put("name", name)
       .put("code", code)
       .put("discoveryDisplayName", discoveryDisplayName);
+    if (ecsRequestRouting != null) {
+      request.put("ecsRequestRouting", ecsRequestRouting);
+    }
     if (id != null) {
       request.put("id", id.toString());
     }

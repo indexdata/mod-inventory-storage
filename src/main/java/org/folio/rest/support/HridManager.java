@@ -15,7 +15,6 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.folio.rest.impl.InstanceStorageBatchApi;
 import org.folio.rest.jaxrs.model.HoldingsRecord;
 import org.folio.rest.jaxrs.model.HridSetting;
 import org.folio.rest.jaxrs.model.HridSettings;
@@ -37,16 +36,6 @@ public class HridManager {
 
   public HridManager(PostgresClient postgresClient) {
     this.postgresClient = Objects.requireNonNull(postgresClient, "PostgresClient cannot be null");
-  }
-
-  /**
-   * Deprecated.
-   *
-   * @deprecated Remove after deprecated {@link InstanceStorageBatchApi} has been removed
-   */
-  @Deprecated
-  public Future<String> getNextInstanceHrid() {
-    return populateHrid(new Instance()).map(Instance::getHrid);
   }
 
   public Future<Item> populateHrid(Item item) {
@@ -129,12 +118,8 @@ public class HridManager {
     if (n == 0) {
       return Future.succeededFuture(Collections.emptyList());
     }
-    StringBuilder sql = new StringBuilder("SELECT jsonb::text");
-    for (int i = 0; i < n; i++) {
-      sql.append(", nextval($1)");
-    }
-    sql.append(" FROM hrid_settings");
-    return postgresClient.selectSingle(sql.toString(), Tuple.of(type.getSequenceName()))
+    String sql = "SELECT jsonb::text%s FROM hrid_settings".formatted(", nextval($1)".repeat(Math.max(0, n)));
+    return postgresClient.selectSingle(sql, Tuple.of(type.getSequenceName()))
       .map(row -> {
         HridSettings hridSettings = Json.decodeValue(row.getString(0), HridSettings.class);
         final String hridPrefix = type.getPrefix(hridSettings);
@@ -155,7 +140,7 @@ public class HridManager {
     return Boolean.TRUE.equals(hridSettings.getCommonRetainLeadingZeroes()) ? "%s%011d" : "%s%d";
   }
 
-  private enum InventoryType implements Inventory<HridSettings> {
+  private enum InventoryType implements Inventory {
     HOLDINGS {
       @Override
       public String getPrefix(HridSettings hridSettings) {
@@ -193,7 +178,7 @@ public class HridManager {
     }
   }
 
-  private interface Inventory<H> {
+  private interface Inventory {
     String getPrefix(HridSettings hridSettings);
 
     String getSequenceName();

@@ -12,6 +12,7 @@ public enum InventoryKafkaTopic implements KafkaTopic {
   BOUND_WITH("bound-with"),
   CAMPUS("campus"),
   CLASSIFICATION_TYPE("classification-type"),
+  CALL_NUMBER_TYPE("call-number-type"),
   HOLDINGS_RECORD("holdings-record"),
   INSTANCE("instance"),
   INSTANCE_CONTRIBUTION("instance-contribution"),
@@ -34,6 +35,7 @@ public enum InventoryKafkaTopic implements KafkaTopic {
    */
   private static final Map<InventoryKafkaTopic, Pair<String, String>> TOPIC_PARTITION_MAP = Map.of(
     CLASSIFICATION_TYPE, Pair.of("KAFKA_CLASSIFICATION_TYPE_TOPIC_NUM_PARTITIONS", "1"),
+    CALL_NUMBER_TYPE, Pair.of("KAFKA_CALL_NUMBER_TYPE_TOPIC_NUM_PARTITIONS", "1"),
     LOCATION, Pair.of("KAFKA_LOCATION_TOPIC_NUM_PARTITIONS", "1"),
     LIBRARY, Pair.of("KAFKA_LIBRARY_TOPIC_NUM_PARTITIONS", "1"),
     CAMPUS, Pair.of("KAFKA_CAMPUS_TOPIC_NUM_PARTITIONS", "1"),
@@ -42,6 +44,14 @@ public enum InventoryKafkaTopic implements KafkaTopic {
     REINDEX_RECORDS, Pair.of("KAFKA_REINDEX_RECORDS_TOPIC_NUM_PARTITIONS", "16"),
     SUBJECT_SOURCE, Pair.of("KAFKA_SUBJECT_SOURCE_TOPIC_NUM_PARTITIONS", "1"),
     INSTANCE_DATE_TYPE, Pair.of("KAFKA_SUBJECT_SOURCE_TOPIC_NUM_PARTITIONS", "1")
+  );
+
+  private static final Map<InventoryKafkaTopic, Pair<String, String>> TOPIC_MESSAGE_RETENTION_MAP = Map.of(
+    REINDEX_RECORDS, Pair.of("KAFKA_REINDEX_RECORDS_TOPIC_MESSAGE_RETENTION", "86400000") // 1 day
+  );
+
+  private static final Map<InventoryKafkaTopic, Pair<String, String>> TOPIC_MESSAGE_MAX_SIZE_MAP = Map.of(
+    REINDEX_RECORDS, Pair.of("KAFKA_REINDEX_RECORDS_TOPIC_MAX_MESSAGE_SIZE", "10485760") // 10 MB
   );
 
   private final String topic;
@@ -63,8 +73,22 @@ public enum InventoryKafkaTopic implements KafkaTopic {
   @Override
   public int numPartitions() {
     return Optional.ofNullable(TOPIC_PARTITION_MAP.get(this))
-      .map(pair -> getNumberOfPartitions(pair.getKey(), pair.getValue()))
-      .orElse(getNumberOfPartitions(DEFAULT_NUM_PARTITIONS_PROPERTY, DEFAULT_NUM_PARTITIONS_VALUE));
+      .map(pair -> getPropertyValue(pair.getKey(), pair.getValue()))
+      .orElse(getPropertyValue(DEFAULT_NUM_PARTITIONS_PROPERTY, DEFAULT_NUM_PARTITIONS_VALUE));
+  }
+
+  @Override
+  public Integer messageRetentionTime() {
+    return Optional.ofNullable(TOPIC_MESSAGE_RETENTION_MAP.get(this))
+      .map(pair -> getPropertyValue(pair.getKey(), pair.getValue()))
+      .orElse(null);
+  }
+
+  @Override
+  public Integer messageMaxSize() {
+    return Optional.ofNullable(TOPIC_MESSAGE_MAX_SIZE_MAP.get(this))
+      .map(pair -> getPropertyValue(pair.getKey(), pair.getValue()))
+      .orElse(null);
   }
 
   public static InventoryKafkaTopic byTopic(String topic) {
@@ -76,7 +100,7 @@ public enum InventoryKafkaTopic implements KafkaTopic {
     throw new IllegalArgumentException("Unknown topic " + topic);
   }
 
-  private int getNumberOfPartitions(String propertyName, String defaultNumPartitions) {
+  private int getPropertyValue(String propertyName, String defaultNumPartitions) {
     return Integer.parseInt(StringUtils.firstNonBlank(
       System.getenv(propertyName),
       System.getProperty(propertyName),

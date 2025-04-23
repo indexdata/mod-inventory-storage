@@ -1,16 +1,11 @@
 package org.folio.rest.api;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToIgnoreCase;
-import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.verify;
 import static com.github.tomakehurst.wiremock.http.Response.Builder.like;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.folio.HttpStatus.HTTP_CREATED;
 import static org.folio.HttpStatus.HTTP_UNPROCESSABLE_ENTITY;
 import static org.folio.rest.api.ItemEffectiveCallNumberComponentsTest.ITEM_LEVEL_CALL_NUMBER_TYPE;
-import static org.folio.rest.support.AdditionalHttpStatusCodes.UNPROCESSABLE_ENTITY;
 import static org.folio.rest.support.HttpResponseMatchers.errorMessageContains;
 import static org.folio.rest.support.HttpResponseMatchers.errorParametersValueIs;
 import static org.folio.rest.support.HttpResponseMatchers.statusCodeIs;
@@ -63,11 +58,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
+import kotlin.jvm.functions.Function4;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -76,7 +73,6 @@ import org.folio.HttpStatus;
 import org.folio.rest.jaxrs.model.Errors;
 import org.folio.rest.jaxrs.model.Note;
 import org.folio.rest.persist.PostgresClient;
-import org.folio.rest.support.AdditionalHttpStatusCodes;
 import org.folio.rest.support.IndividualResource;
 import org.folio.rest.support.JsonArrayHelper;
 import org.folio.rest.support.JsonErrorResponse;
@@ -90,6 +86,7 @@ import org.folio.rest.support.messages.ItemEventMessageChecks;
 import org.folio.rest.tools.utils.OptimisticLockingUtil;
 import org.folio.services.consortium.entities.SharingInstance;
 import org.folio.services.consortium.entities.SharingStatus;
+import org.folio.util.PercentCodec;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -165,7 +162,7 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
 
     WireMock.reset();
     mockUserTenantsForNonConsortiumMember();
-    mockUserTenantsForConsortiumMember();
+    mockUserTenantsForConsortiumMember(CONSORTIUM_MEMBER_TENANT);
     mockUserTenantsForTenantWithoutPermissions();
   }
 
@@ -370,7 +367,7 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
 
     JsonErrorResponse response = createCompleted.get(TIMEOUT, TimeUnit.SECONDS);
 
-    assertThat(response.getStatusCode(), is(AdditionalHttpStatusCodes.UNPROCESSABLE_ENTITY));
+    assertThat(response.getStatusCode(), is(HTTP_UNPROCESSABLE_ENTITY.toInt()));
     assertThat(response.getErrors(), hasSoleMessageContaining("Unrecognized field"));
   }
 
@@ -704,6 +701,54 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
   }
 
   @Test
+  @SneakyThrows
+  public void canGetByInstanceId() {
+    UUID instanceId = UUID.randomUUID();
+    instancesClient.create(nod(instanceId));
+    Function4<UUID, String, String, String, String> createHolding =
+        (location, prefix, callNumber, suffix) -> createHolding(new HoldingRequestBuilder()
+            .forInstance(instanceId)
+            .withSource(getPreparedHoldingSourceId())
+            .withPermanentLocation(location)
+            .withCallNumberPrefix(prefix)
+            .withCallNumber(callNumber)
+            .withCallNumberSuffix(suffix))
+          .getId().toString();
+    final var h7 = createHolding.invoke(SECOND_FLOOR_LOCATION_ID, "b", "k", "p");
+    final var h6 = createHolding.invoke(MAIN_LIBRARY_LOCATION_ID, "c", "j", "q");
+    final var h5 = createHolding.invoke(MAIN_LIBRARY_LOCATION_ID, "b", "k", "q");
+    final var h4 = createHolding.invoke(MAIN_LIBRARY_LOCATION_ID, "a", "l", "r");
+    final var h3 = createHolding.invoke(MAIN_LIBRARY_LOCATION_ID, "a", "k", "o");
+    final var h2 = createHolding.invoke(MAIN_LIBRARY_LOCATION_ID, "a", "j", "q");
+    final var h1 = createHolding.invoke(MAIN_LIBRARY_LOCATION_ID, "a", "j", "p");
+    final var h0 = createHolding.invoke(ANNEX_LIBRARY_LOCATION_ID, "b", "k", "q");
+    Function<String, List<String>> getHoldingsIds = query -> holdingsClient.getByQuery(query).stream()
+        .map(holding -> holding.getString("id")).toList();
+
+    var query = "instanceId==" + instanceId
+        + " sortBy effectiveLocation.name callNumberPrefix callNumber callNumberSuffix";
+    query = "?query=" + PercentCodec.encode(query);
+    var ids = getHoldingsIds.apply(query);
+    assertThat(ids, is(List.of(h0, h1, h2, h3, h4, h5, h6, h7)));
+
+    ids = getHoldingsIds.apply(query + "&offset=2&limit=4");
+    assertThat(ids, is(List.of(h2, h3, h4, h5)));
+
+    query = "instanceId==" + instanceId + " sortBy callNumberSuffix callNumber callNumberPrefix effectiveLocation.name";
+    query = "?query=" + PercentCodec.encode(query);
+    ids = getHoldingsIds.apply(query);
+    // h3 M a k o
+    // h1 M a j p
+    // h7 S b k p
+    // h2 M a j q
+    // h6 M c j q
+    // h0 A b k q
+    // h5 M b k q
+    // h4 M a l r
+    assertThat(ids, is(List.of(h3, h1, h7, h2, h6, h0, h5, h4)));
+  }
+
+  @Test
   public void canDeleteAllHoldings() {
     UUID firstInstanceId = UUID.randomUUID();
     UUID secondInstanceId = UUID.randomUUID();
@@ -883,6 +928,22 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
   }
 
   @Test
+  public void shouldNotUpdateHoldingsIfNoChanges() {
+    var holdingId = createInstanceAndHolding(MAIN_LIBRARY_LOCATION_ID).toString();
+    var holding = getById(holdingId).getJson();
+    holdingsMessageChecks.createdMessagePublished(holdingId);
+
+    assertThat(update(holding).getStatusCode(), is(204));
+
+    var updatedHolding = getById(holdingId).getJson();
+    //assert that there was no update in database
+    assertThat(updatedHolding.getString("_version"), is("1"));
+    var kafkaEvents = KAFKA_CONSUMER.getMessagesForHoldings(holdingId);
+    //assert that there's only CREATE kafka message, no updates
+    assertThat(kafkaEvents.size(), is(1));
+  }
+
+  @Test
   public void updatingHoldingsWithSourceIdShouldUpdate()
     throws InterruptedException, ExecutionException, TimeoutException {
     UUID instanceId = UUID.randomUUID();
@@ -991,7 +1052,7 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
   public void updatingOrRemovingTemporaryLocationChangesEffectiveLocation()
     throws InterruptedException, ExecutionException, TimeoutException {
     UUID instanceId = UUID.randomUUID();
-    
+
     instancesClient.create(smallAngryPlanet(instanceId));
     setHoldingsSequence(1);
 
@@ -1063,7 +1124,7 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
 
     UUID holdingId = UUID.randomUUID();
 
-    final JsonObject holding = holdingsClient.create(new HoldingRequestBuilder()
+    final JsonObject holding = createHolding(new HoldingRequestBuilder()
       .withId(holdingId)
       .forInstance(instanceId)
       .withSource(getPreparedHoldingSourceId())
@@ -2328,22 +2389,22 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
 
     final Response duplicateResponse = create(holdingsStorageUrl(""), duplicateHoldings);
 
-    assertThat(duplicateResponse.getStatusCode(), is(UNPROCESSABLE_ENTITY));
+    assertThat(duplicateResponse.getStatusCode(), is(HTTP_UNPROCESSABLE_ENTITY.toInt()));
 
     final Errors errors = duplicateResponse.getJson().mapTo(Errors.class);
 
     assertThat(errors, notNullValue());
     assertThat(errors.getErrors(), notNullValue());
     assertThat(errors.getErrors().size(), is(1));
-    assertThat(errors.getErrors().get(0), notNullValue());
-    assertThat(errors.getErrors().get(0).getMessage(),
+    assertThat(errors.getErrors().getFirst(), notNullValue());
+    assertThat(errors.getErrors().getFirst().getMessage(),
       containsString("HRID value already exists in table holdings_record: ho00000000001"));
-    assertThat(errors.getErrors().get(0).getParameters(), notNullValue());
-    assertThat(errors.getErrors().get(0).getParameters().size(), is(1));
-    assertThat(errors.getErrors().get(0).getParameters().get(0), notNullValue());
-    assertThat(errors.getErrors().get(0).getParameters().get(0).getKey(),
+    assertThat(errors.getErrors().getFirst().getParameters(), notNullValue());
+    assertThat(errors.getErrors().getFirst().getParameters().size(), is(1));
+    assertThat(errors.getErrors().getFirst().getParameters().getFirst(), notNullValue());
+    assertThat(errors.getErrors().getFirst().getParameters().getFirst().getKey(),
       is("lower(f_unaccent(jsonb ->> 'hrid'::text))"));
-    assertThat(errors.getErrors().get(0).getParameters().get(0).getValue(),
+    assertThat(errors.getErrors().getFirst().getParameters().getFirst().getValue(),
       is("ho00000000001"));
 
     log.info("Finished cannotCreateAHoldingsWhenDuplicateHRIDIsSupplied");
@@ -2422,14 +2483,14 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
 
     assertThat(errors, notNullValue());
     assertThat(errors.getErrors(), notNullValue());
-    assertThat(errors.getErrors().get(0), notNullValue());
-    assertThat(errors.getErrors().get(0).getMessage(),
+    assertThat(errors.getErrors().getFirst(), notNullValue());
+    assertThat(errors.getErrors().getFirst().getMessage(),
       is("HRID value already exists in table holdings_record: ho00000001000"));
-    assertThat(errors.getErrors().get(0).getParameters(), notNullValue());
-    assertThat(errors.getErrors().get(0).getParameters().get(0), notNullValue());
-    assertThat(errors.getErrors().get(0).getParameters().get(0).getKey(),
+    assertThat(errors.getErrors().getFirst().getParameters(), notNullValue());
+    assertThat(errors.getErrors().getFirst().getParameters().getFirst(), notNullValue());
+    assertThat(errors.getErrors().getFirst().getParameters().getFirst().getKey(),
       is("lower(f_unaccent(jsonb ->> 'hrid'::text))"));
-    assertThat(errors.getErrors().get(0).getParameters().get(0).getValue(),
+    assertThat(errors.getErrors().getFirst().getParameters().getFirst().getValue(),
       is("ho00000001000"));
   }
 
@@ -2538,8 +2599,7 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
 
     // Make sure a create event published vs update event
     holdingsMessageChecks.createdMessagePublished(holdingsFromGet);
-    holdingsMessageChecks.noHoldingsUpdatedMessagePublished(
-      instanceId.toString(), holdingsId.toString());
+    holdingsMessageChecks.noHoldingsUpdatedMessagePublished(holdingsId.toString());
 
     log.info("Finished canUsePutToCreateAHoldingsWhenHRIDIsSupplied");
   }
@@ -2569,25 +2629,6 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
       CONSORTIUM_MEMBER_TENANT, mockServer.baseUrl());
 
     log.info("Finished canCreateHoldingAndCreateShadowInstance");
-  }
-
-  @Test
-  public void shouldNotExecuteConsortiumLogicIfUserNotHavePermissionsToRetrieveConsortiumData() {
-    mockSharingInstance();
-
-    UUID instanceId = UUID.randomUUID();
-    HoldingRequestBuilder builder = new HoldingRequestBuilder()
-      .withId(null)
-      .forInstance(instanceId)
-      .withSource(getPreparedHoldingSourceId())
-      .withPermanentLocation(MAIN_LIBRARY_LOCATION_ID);
-
-    Response response = holdingsClient.attemptToCreate("", builder.create(), TENANT_WITHOUT_USER_TENANTS_PERMISSIONS,
-      Map.of(X_OKAPI_URL, mockServer.baseUrl()));
-
-    verify(1, getRequestedFor(urlEqualTo(USER_TENANTS_PATH)));
-    verify(0, postRequestedFor(urlEqualTo("/consortia/mobius/sharing/instances")));
-    assertThat(response.getStatusCode(), is(HTTP_UNPROCESSABLE_ENTITY.toInt()));
   }
 
   @Test
@@ -2659,14 +2700,16 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
 
     assertThat(errors, notNullValue());
     assertThat(errors.getErrors(), notNullValue());
-    assertThat(errors.getErrors().get(0), notNullValue());
-    assertThat(errors.getErrors().get(0).getMessage(),
+    var error = errors.getErrors().getFirst();
+    assertThat(error, notNullValue());
+    assertThat(error.getMessage(),
       is("HRID value already exists in table holdings_record: ho00000000001"));
-    assertThat(errors.getErrors().get(0).getParameters(), notNullValue());
-    assertThat(errors.getErrors().get(0).getParameters().get(0), notNullValue());
-    assertThat(errors.getErrors().get(0).getParameters().get(0).getKey(),
+    assertThat(error.getParameters(), notNullValue());
+    var parameter = error.getParameters().getFirst();
+    assertThat(parameter, notNullValue());
+    assertThat(parameter.getKey(),
       is("lower(f_unaccent(jsonb ->> 'hrid'::text))"));
-    assertThat(errors.getErrors().get(0).getParameters().get(0).getValue(),
+    assertThat(parameter.getValue(),
       is("ho00000000001"));
 
     for (int i = 0; i < holdingsArray.size(); i++) {
@@ -2732,7 +2775,7 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
       .getMany("fullCallNumber == \"%s\"", "prefix callNumber suffix");
 
     assertThat(foundHoldings.size(), is(1));
-    assertThat(foundHoldings.get(0).getId(), is(wholeCallNumberHolding.getId()));
+    assertThat(foundHoldings.getFirst().getId(), is(wholeCallNumberHolding.getId()));
   }
 
   @Test
@@ -2787,11 +2830,11 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
 
     var foundPlanet = holdingsClient.getMany("instance.title = planet");
     assertThat(foundPlanet, hasSize(1));
-    assertThat(foundPlanet.get(0).getId(), is(holdingPlanet));
+    assertThat(foundPlanet.getFirst().getId(), is(holdingPlanet));
 
     var foundUprooted = holdingsClient.getMany("instance.title = uprooted");
     assertThat(foundUprooted, hasSize(1));
-    assertThat(foundUprooted.get(0).getId(), is(holdingUprooted));
+    assertThat(foundUprooted.getFirst().getId(), is(holdingUprooted));
   }
 
   @Test
@@ -2981,7 +3024,7 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
       .getMany("cql.allRecords=1 not discoverySuppress==true");
 
     assertThat(suppressedHoldings.size(), is(1));
-    assertThat(suppressedHoldings.get(0).getId(), is(suppressedHolding.getId()));
+    assertThat(suppressedHoldings.getFirst().getId(), is(suppressedHolding.getId()));
 
     assertThat(notSuppressedHoldings.size(), is(2));
     assertThat(notSuppressedHoldings.stream()
@@ -3256,8 +3299,8 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
         .put("id", sourceId)
         .put("name", "holding source name for " + sourceId));
       holdingsSourceClient.create(new JsonObject()
-        .put("id", sourceId)
-        .put("name", "holding source name for " + sourceId),
+          .put("id", sourceId)
+          .put("name", "holding source name for " + sourceId),
         CONSORTIUM_MEMBER_TENANT);
     }
   }
@@ -3386,6 +3429,12 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
       is(both(greaterThanOrEqualTo(minHrid)).and(lessThanOrEqualTo(maxHrid))));
   }
 
+  private IndividualResource createHolding(HoldingRequestBuilder holding) {
+    return holdingsClient.create(holding.create(),
+        TENANT_ID,
+        Map.of(X_OKAPI_URL, mockServer.baseUrl()));
+  }
+
   private Response create(URL url, Object entity) throws InterruptedException, ExecutionException, TimeoutException {
     CompletableFuture<Response> createCompleted = new CompletableFuture<>();
 
@@ -3435,19 +3484,8 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
   private List<String> getTags(JsonObject json) {
     return json.getJsonObject("tags").getJsonArray("tagList")
       .stream()
-      .map(obj -> (String) obj)
+      .map(String.class::cast)
       .toList();
-  }
-
-  private void mockUserTenantsForConsortiumMember() {
-    JsonObject userTenantsCollection = new JsonObject()
-      .put("userTenants", new JsonArray()
-        .add(new JsonObject()
-          .put("centralTenantId", "CENTRAL_TENANT_ID")
-          .put("consortiumId", "mobius")));
-    WireMock.stubFor(WireMock.get(USER_TENANTS_PATH)
-      .withHeader(X_OKAPI_TENANT, equalToIgnoreCase(CONSORTIUM_MEMBER_TENANT))
-      .willReturn(WireMock.ok().withBody(userTenantsCollection.encodePrettily())));
   }
 
   private void mockUserTenantsForTenantWithoutPermissions() {
@@ -3487,6 +3525,7 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
       return NAME;
     }
 
+    @Override
     public boolean applyGlobally() {
       return false;
     }
