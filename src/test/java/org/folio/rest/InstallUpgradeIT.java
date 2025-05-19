@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import org.awaitility.Awaitility;
 import org.folio.okapi.common.XOkapiHeaders;
+import org.folio.utility.KafkaUtility;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -31,12 +32,11 @@ import org.testcontainers.Testcontainers;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.Container.ExecResult;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.images.builder.ImageFromDockerfile;
-import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.kafka.KafkaContainer;
 
 /**
  * Check the shaded fat uber jar and Dockerfile:
@@ -59,13 +59,13 @@ public class InstallUpgradeIT {
 
   @ClassRule(order = 0)
   public static final KafkaContainer KAFKA =
-    new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.0.3"))
+    new KafkaContainer(KafkaUtility.getImageName())
       .withNetwork(NETWORK)
       .withNetworkAliases("mykafka");
 
   @ClassRule(order = 1)
   public static final PostgreSQLContainer<?> POSTGRES =
-    new PostgreSQLContainer<>("postgres:12-alpine")
+    new PostgreSQLContainer<>("postgres:16-alpine")
       .withClasspathResourceMapping("lotus-23.0.0.sql", "/lotus-23.0.0.sql", BindMode.READ_ONLY)
       .withNetwork(NETWORK)
       .withNetworkAliases("mypostgres")
@@ -172,8 +172,8 @@ public class InstallUpgradeIT {
     setTenant("logtenant");
 
     given()
-      .header("X-Okapi-Request-Id", "987654321")
-      .header("X-Okapi-User-Id", "itsme")
+      .header(XOkapiHeaders.REQUEST_ID, "987654321")
+      .header(XOkapiHeaders.USER_ID, "itsme")
       .when()
       .get("/location-units/libraries")
       .then()

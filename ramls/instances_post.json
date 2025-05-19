@@ -8,8 +8,8 @@
       "id": "instances",
       "type": "array",
       "items": {
-        "type": "object",
-        "$ref": "instance.json"
+        "$ref": "instance.json",
+        "type" : "object"
       }
     }
   },

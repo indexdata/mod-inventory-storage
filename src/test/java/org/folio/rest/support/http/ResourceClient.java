@@ -6,8 +6,8 @@ import static org.hamcrest.core.Is.is;
 
 import io.vertx.core.json.JsonObject;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -112,8 +112,8 @@ public final class ResourceClient {
   }
 
   public static ResourceClient forLocations(HttpClient client) {
-    return new ResourceClient(client, InterfaceUrls::shelfLocationsStorageUrl,
-      "locations", "shelflocations");
+    return new ResourceClient(client, InterfaceUrls::locationsStorageUrl,
+      "locations", "locations");
   }
 
   public static ResourceClient forInstanceTypes(HttpClient client) {
@@ -146,11 +146,6 @@ public final class ResourceClient {
       "Items batch sync", "items");
   }
 
-  public static ResourceClient forInstancesStorageBatchInstances(HttpClient client) {
-    return new ResourceClient(client, InterfaceUrls::instancesStorageBatchInstancesUrl,
-      "Instances batch (Deprecated)", "instances");
-  }
-
   public static ResourceClient forIllPolicies(HttpClient client) {
     return new ResourceClient(client, InterfaceUrls::illPoliciesUrl,
       "Ill Policies", "illPolicies");
@@ -174,6 +169,11 @@ public final class ResourceClient {
   public static ResourceClient forInstanceReindex(HttpClient client) {
     return new ResourceClient(client, InterfaceUrls::instanceReindex,
       "Instance reindex", "reindex");
+  }
+
+  public static ResourceClient forServicePoints(HttpClient client) {
+    return new ResourceClient(client, InterfaceUrls::servicePointsUrl,
+      "Service points", "servicepoints");
   }
 
   public IndividualResource create(Builder builder) {
@@ -223,15 +223,9 @@ public final class ResourceClient {
   }
 
   public Response attemptToCreate(String subPath, JsonObject request, String tenantId, Map<String, String> headers) {
-
     CompletableFuture<Response> createCompleted = new CompletableFuture<>();
 
-    try {
-      client.post(urlMaker.combine(subPath), request, headers, tenantId,
-        ResponseHandler.any(createCompleted));
-    } catch (MalformedURLException e) {
-      throw new RuntimeException(subPath + ": " + e.getMessage(), e);
-    }
+    client.post(urlMaker.combine(subPath), request, headers, tenantId, ResponseHandler.any(createCompleted));
 
     return TestBase.get(createCompleted);
   }
@@ -255,10 +249,13 @@ public final class ResourceClient {
   }
 
   public Response attemptToReplace(String id, JsonObject request) {
+    return attemptToReplace(id, request, TENANT_ID, new HashMap<>());
+  }
+
+  public Response attemptToReplace(String id, JsonObject request, String tenantId, Map<String, String> headers) {
     CompletableFuture<Response> putCompleted = new CompletableFuture<>();
 
-    client.put(urlMakerWithId(id), request,
-      TENANT_ID, ResponseHandler.any(putCompleted));
+    client.put(urlMakerWithId(id), request, headers, tenantId, ResponseHandler.any(putCompleted));
 
     return TestBase.get(putCompleted);
   }
@@ -298,13 +295,9 @@ public final class ResourceClient {
   public Response attemptDeleteAll() {
     CompletableFuture<Response> deleteAllFinished = new CompletableFuture<>();
 
-    try {
-      var cql = PercentCodec.encode("cql.allRecords=1");
-      client.delete(urlMaker.combine("?query=" + cql), TENANT_ID,
-        ResponseHandler.any(deleteAllFinished));
-    } catch (MalformedURLException e) {
-      throw new RuntimeException(e);
-    }
+    var cql = PercentCodec.encode("cql.allRecords=1");
+    client.delete(urlMaker.combine("?query=" + cql), TENANT_ID,
+      ResponseHandler.any(deleteAllFinished));
 
     return TestBase.get(deleteAllFinished);
   }
@@ -318,14 +311,13 @@ public final class ResourceClient {
   }
 
   public void deleteAllIndividually() {
-
     List<JsonObject> records = getAll();
 
-    records.stream().forEach(record -> {
+    records.forEach(recordObj -> {
       try {
         CompletableFuture<Response> deleteFinished = new CompletableFuture<>();
 
-        client.delete(urlMakerWithId(record.getString("id")), TENANT_ID,
+        client.delete(urlMakerWithId(recordObj.getString("id")), TENANT_ID,
           ResponseHandler.any(deleteFinished));
 
         Response deleteResponse = TestBase.get(deleteFinished);
@@ -351,12 +343,8 @@ public final class ResourceClient {
 
     CompletableFuture<Response> getFinished = new CompletableFuture<>();
 
-    try {
-      client.get(urlMaker.combine(query), TENANT_ID,
-        ResponseHandler.any(getFinished));
-    } catch (MalformedURLException e) {
-      throw new RuntimeException(e);
-    }
+    client.get(urlMaker.combine(query), TENANT_ID,
+      ResponseHandler.any(getFinished));
 
     Response response = TestBase.get(getFinished);
 
@@ -374,12 +362,8 @@ public final class ResourceClient {
     final String encodedQuery = StringUtil
       .urlEncode(String.format(query, queryParams));
 
-    try {
-      client.get(urlMaker.combine("?query=" + encodedQuery),
-        TENANT_ID, ResponseHandler.json(getFinished));
-    } catch (MalformedURLException e) {
-      throw new RuntimeException(e);
-    }
+    client.get(urlMaker.combine("?query=" + encodedQuery),
+      TENANT_ID, ResponseHandler.json(getFinished));
 
     Response response = TestBase.get(getFinished);
 
@@ -398,15 +382,11 @@ public final class ResourceClient {
    * <p>Wrap MalformedURLException into RuntimeException.
    */
   private URL urlMakerWithId(String id) {
-    try {
-      return urlMaker.combine(String.format("/%s", id));
-    } catch (MalformedURLException e) {
-      throw new RuntimeException(e);
-    }
+    return urlMaker.combine(String.format("/%s", id));
   }
 
   @FunctionalInterface
   public interface UrlMaker {
-    URL combine(String subPath) throws MalformedURLException;
+    URL combine(String subPath);
   }
 }

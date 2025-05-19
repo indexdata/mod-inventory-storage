@@ -1,14 +1,12 @@
 package org.folio.persist;
 
 import static io.vertx.core.Future.succeededFuture;
-import static io.vertx.core.Promise.promise;
-import static java.lang.String.format;
 
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
-import io.vertx.core.Promise;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
+import io.vertx.sqlclient.Tuple;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +20,7 @@ import org.folio.rest.persist.SQLConnection;
 import org.folio.rest.persist.interfaces.Results;
 
 public abstract class AbstractRepository<T> {
+
   protected final PostgresClientFuturized postgresClientFuturized;
   protected final PostgresClient postgresClient;
   protected final String tableName;
@@ -44,11 +43,8 @@ public abstract class AbstractRepository<T> {
   }
 
   public Future<List<T>> get(AsyncResult<SQLConnection> connection, Criterion criterion) {
-    final Promise<Results<T>> getItemsResult = promise();
-
-    postgresClient.get(connection, tableName, recordType, criterion, false, true, getItemsResult);
-
-    return getItemsResult.future().map(Results::getResults);
+    return postgresClient.withConn(connection, conn -> conn.get(tableName, recordType, criterion, false))
+        .map(Results::getResults);
   }
 
   public Future<T> getById(String id) {
@@ -67,13 +63,15 @@ public abstract class AbstractRepository<T> {
     return getById(ids);
   }
 
+  public Future<Boolean> exists(String id) {
+    return postgresClient.execute(
+        "select 1 from " + postgresClient.getSchemaName() + "." + tableName + " where id = $1 limit 1",
+        Tuple.of(id))
+      .map(ar -> ar != null && ar.rowCount() == 1);
+  }
+
   public Future<RowSet<Row>> update(AsyncResult<SQLConnection> connection, String id, T entity) {
-    final Promise<RowSet<Row>> promise = promise();
-
-    postgresClient.update(connection, tableName, entity, "jsonb",
-      format("WHERE id = '%s'", id), false, promise);
-
-    return promise.future();
+    return postgresClient.withConn(connection, conn -> conn.update(tableName, entity, id));
   }
 
   public Future<RowSet<Row>> update(SQLConnection connection, String id, T entity) {
@@ -81,27 +79,11 @@ public abstract class AbstractRepository<T> {
   }
 
   public Future<RowSet<Row>> update(String id, T entity) {
-    final Promise<RowSet<Row>> promise = promise();
-
-    postgresClient.update(tableName, entity, id, promise);
-
-    return promise.future();
-  }
-
-  public Future<RowSet<Row>> update(List<T> records) {
-    final Promise<RowSet<Row>> promise = promise();
-
-    postgresClient.upsertBatch(tableName, records, promise);
-
-    return promise.future();
+    return postgresClient.update(tableName, entity, id);
   }
 
   public Future<RowSet<Row>> updateBatch(List<T> records, SQLConnection connection) {
-    final Promise<RowSet<Row>> promise = promise();
-
-    postgresClient.upsertBatch(Future.succeededFuture(connection), tableName, records, promise);
-
-    return promise.future();
+    return postgresClient.withConn(succeededFuture(connection), conn -> conn.upsertBatch(tableName, records));
   }
 
   public Future<RowSet<Row>> deleteAll() {

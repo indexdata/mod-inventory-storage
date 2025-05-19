@@ -6,6 +6,8 @@ import static org.folio.rest.support.http.InterfaceUrls.itemsStorageUrl;
 import static org.folio.rest.support.http.InterfaceUrls.loanTypesStorageUrl;
 import static org.folio.rest.support.http.InterfaceUrls.materialTypesStorageUrl;
 import static org.folio.utility.ModuleUtility.getClient;
+import static org.folio.utility.RestUtility.CONSORTIUM_CENTRAL_TENANT;
+import static org.folio.utility.RestUtility.CONSORTIUM_MEMBER_TENANT;
 import static org.folio.utility.RestUtility.TENANT_ID;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -16,6 +18,7 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
@@ -59,6 +62,7 @@ public abstract class TestBaseWithInventoryUtil extends TestBase {
   public static final UUID SECOND_FLOOR_LOCATION_ID = UUID.randomUUID();
   public static final UUID THIRD_FLOOR_LOCATION_ID = UUID.randomUUID();
   public static final UUID FOURTH_FLOOR_LOCATION_ID = UUID.randomUUID();
+  public static final String USER_TENANTS_PATH = "/user-tenants?limit=1";
   protected static final String PERMANENT_LOCATION_ID_KEY = "permanentLocationId";
   protected static final String TEMPORARY_LOCATION_ID_KEY = "temporaryLocationId";
   protected static final String EFFECTIVE_LOCATION_ID_KEY = "effectiveLocationId";
@@ -72,6 +76,8 @@ public abstract class TestBaseWithInventoryUtil extends TestBase {
   protected static final UUID UUID_TEXT = UUID.fromString("6312d172-f0cf-40f6-b27d-9fa8feaf332f");
   protected static final UUID UUID_INSTANCE_TYPE = UUID.fromString("535e3160-763a-42f9-b0c0-d8ed7df6e2a2");
   protected static final UUID UUID_INSTANCE_DATE_TYPE = UUID.fromString("42dac21e-3c81-4cb1-9f16-9e50c81bacc4");
+  protected static final UUID UUID_INSTANCE_SUBJECT_TYPE_ID = UUID.fromString("d6488f88-1e74-40ce-81b5-b19a928ff5b1");
+  protected static final UUID UUID_INSTANCE_SUBJECT_SOURCE_ID = UUID.fromString("e894d0dc-621d-4b1d-98f6-6f7120eb0d40");
   protected static UUID journalMaterialTypeId;
   protected static String journalMaterialTypeID;
   protected static UUID bookMaterialTypeId;
@@ -80,7 +86,6 @@ public abstract class TestBaseWithInventoryUtil extends TestBase {
   protected static String canCirculateLoanTypeID;
   protected static UUID nonCirculatingLoanTypeId;
   protected static String nonCirculatingLoanTypeID;
-  private static final String USER_TENANTS_PATH = "/user-tenants?limit=1";
 
   @BeforeClass
   public static void testBaseWithInvUtilBeforeClass() {
@@ -109,6 +114,30 @@ public abstract class TestBaseWithInventoryUtil extends TestBase {
     WireMock.stubFor(WireMock.get(USER_TENANTS_PATH)
       .withHeader(XOkapiHeaders.TENANT, equalToIgnoreCase(TENANT_ID))
       .willReturn(WireMock.ok().withBody(emptyUserTenantsCollection.encodePrettily())));
+  }
+
+  public static void mockUserTenantsForConsortiumMember(String tenantId) {
+    JsonObject userTenantsCollection = new JsonObject()
+      .put("userTenants", new JsonArray()
+        .add(new JsonObject()
+          .put("centralTenantId", CONSORTIUM_CENTRAL_TENANT)
+          .put("consortiumId", "mobius")));
+    WireMock.stubFor(WireMock.get(USER_TENANTS_PATH)
+      .withHeader(XOkapiHeaders.TENANT, equalToIgnoreCase(tenantId))
+      .willReturn(WireMock.ok().withBody(userTenantsCollection.encodePrettily())));
+  }
+
+  public static void mockConsortiumTenants() {
+    JsonObject tenantsCollection = new JsonObject()
+      .put("tenants", new JsonArray()
+        .add(new JsonObject()
+          .put("id", CONSORTIUM_CENTRAL_TENANT)
+          .put("isCentral", true))
+        .add(new JsonObject()
+          .put("id", CONSORTIUM_MEMBER_TENANT)
+          .put("isCentral", false)));
+    WireMock.stubFor(WireMock.get("/consortia/mobius/tenants")
+      .willReturn(WireMock.ok().withBody(tenantsCollection.encodePrettily())));
   }
 
   protected static void setupMaterialTypes() {
@@ -184,6 +213,17 @@ public abstract class TestBaseWithInventoryUtil extends TestBase {
   protected static UUID createHolding(UUID instanceId,
                                       UUID holdingsPermanentLocationId,
                                       UUID holdingsTemporaryLocationId) {
+    return createHolding(instanceId, holdingsPermanentLocationId, holdingsTemporaryLocationId, null);
+  }
+
+  protected static UUID createHolding(UUID instanceId,
+                                      UUID holdingsPermanentLocationId,
+                                      UUID holdingsTemporaryLocationId,
+                                      List<String> electronicAccessUrls) {
+    var electronicAccessArray = electronicAccessUrls == null ? null
+      : electronicAccessUrls.stream()
+      .map(url -> new JsonObject().put("uri", url))
+      .collect(JsonArray::new, JsonArray::add, JsonArray::addAll);
     return holdingsClient.create(
       new HoldingRequestBuilder()
         .withId(UUID.randomUUID())
@@ -191,6 +231,7 @@ public abstract class TestBaseWithInventoryUtil extends TestBase {
         .forInstance(instanceId)
         .withPermanentLocation(holdingsPermanentLocationId)
         .withTemporaryLocation(holdingsTemporaryLocationId)
+        .withElectronicAccess(electronicAccessArray)
         .create(),
       TENANT_ID, Map.of(XOkapiHeaders.URL, mockServer.baseUrl())).getId();
   }
@@ -238,6 +279,14 @@ public abstract class TestBaseWithInventoryUtil extends TestBase {
         .withCallNumberSuffix("testCallNumberSuffix")
         .create(),
       TENANT_ID, Map.of(XOkapiHeaders.URL, mockServer.baseUrl())).getId();
+  }
+
+  public static UUID createInstanceRecord(JsonObject instanceJson) {
+    return instancesClient.create(instanceJson).getId();
+  }
+
+  public Response deleteInstanceRecord(UUID id) {
+    return instancesClient.attemptToDelete(id);
   }
 
   protected static JsonObject instance(UUID id) {
@@ -302,7 +351,7 @@ public abstract class TestBaseWithInventoryUtil extends TestBase {
       .put("name", name);
   }
 
-  protected static JsonObject createInstanceRequest(
+  public static JsonObject createInstanceRequest(
     UUID id,
     String source,
     String title,
@@ -321,7 +370,9 @@ public abstract class TestBaseWithInventoryUtil extends TestBase {
     instanceToCreate.put("source", source);
     instanceToCreate.put("identifiers", identifiers);
     instanceToCreate.put("contributors", contributors);
-    instanceToCreate.put("instanceTypeId", instanceTypeId.toString());
+    if (instanceTypeId != null) {
+      instanceToCreate.put("instanceTypeId", instanceTypeId.toString());
+    }
     instanceToCreate.put("tags", new JsonObject().put("tagList", tags));
     instanceToCreate.put("_version", 1);
     return instanceToCreate;

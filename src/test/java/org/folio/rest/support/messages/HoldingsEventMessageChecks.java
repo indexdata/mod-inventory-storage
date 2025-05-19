@@ -6,6 +6,9 @@ import static org.folio.rest.support.AwaitConfiguration.awaitDuring;
 import static org.folio.services.domainevent.CommonDomainEventPublisher.NULL_ID;
 import static org.folio.utility.ModuleUtility.vertxUrl;
 import static org.folio.utility.RestUtility.TENANT_ID;
+import static org.hamcrest.CoreMatchers.hasItem;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.Matchers.hasProperty;
 
 import io.vertx.core.json.JsonObject;
 import org.folio.rest.support.kafka.FakeKafkaConsumer;
@@ -25,38 +28,36 @@ public class HoldingsEventMessageChecks {
     return holdings.getString("id");
   }
 
-  private static String getInstanceId(JsonObject holdings) {
-    return holdings.getString("instanceId");
-  }
-
   public void createdMessagePublished(JsonObject holdings) {
     final var holdingsId = getId(holdings);
-    final var instanceId = getInstanceId(holdings);
 
-    awaitAtMost().until(() -> kafkaConsumer.getMessagesForHoldings(instanceId, holdingsId),
+    awaitAtMost().until(() -> kafkaConsumer.getMessagesForHoldings(holdingsId),
       eventMessageMatchers.hasCreateEventMessageFor(holdings));
   }
 
   public void createdMessagePublished(JsonObject holdings, String tenantIdExpected, String okapiUrlExpected) {
     final var holdingsId = getId(holdings);
-    final var instanceId = getInstanceId(holdings);
 
-    awaitAtMost().until(() -> kafkaConsumer.getMessagesForHoldings(instanceId, holdingsId),
+    awaitAtMost().until(() -> kafkaConsumer.getMessagesForHoldings(holdingsId),
       eventMessageMatchers.hasCreateEventMessageFor(holdings, tenantIdExpected, okapiUrlExpected));
+  }
+
+  public void createdMessagePublished(String holdingsId) {
+    awaitAtMost().until(() -> kafkaConsumer.getMessagesForHoldings(holdingsId),
+      hasItem(hasProperty("type", is("CREATE"))));
   }
 
   public void updatedMessagePublished(JsonObject oldHoldings,
                                       JsonObject newHoldings) {
 
     final var holdingsId = getId(newHoldings);
-    final var instanceId = getInstanceId(newHoldings);
 
     oldHoldings.remove("holdingsItems");
     oldHoldings.remove("bareHoldingsItems");
     newHoldings.remove("holdingsItems");
     newHoldings.remove("bareHoldingsItems");
 
-    awaitAtMost().until(() -> kafkaConsumer.getMessagesForHoldings(instanceId, holdingsId),
+    awaitAtMost().until(() -> kafkaConsumer.getMessagesForHoldings(holdingsId),
       eventMessageMatchers.hasUpdateEventMessageFor(oldHoldings, newHoldings));
   }
 
@@ -65,36 +66,33 @@ public class HoldingsEventMessageChecks {
                                       String okapiUrlExpected) {
 
     final var holdingsId = getId(newHoldings);
-    final var instanceId = getInstanceId(newHoldings);
 
     oldHoldings.remove("holdingsItems");
     oldHoldings.remove("bareHoldingsItems");
     newHoldings.remove("holdingsItems");
     newHoldings.remove("bareHoldingsItems");
 
-    awaitAtMost().until(() -> kafkaConsumer.getMessagesForHoldings(instanceId, holdingsId),
+    awaitAtMost().until(() -> kafkaConsumer.getMessagesForHoldings(holdingsId),
       eventMessageMatchers.hasUpdateEventMessageFor(oldHoldings, newHoldings, okapiUrlExpected));
   }
 
-  public void noHoldingsUpdatedMessagePublished(String instanceId,
-                                                String holdingsId) {
+  public void noHoldingsUpdatedMessagePublished(String holdingsId) {
 
     awaitDuring(1, SECONDS)
-      .until(() -> kafkaConsumer.getMessagesForHoldings(instanceId, holdingsId),
+      .until(() -> kafkaConsumer.getMessagesForHoldings(holdingsId),
         eventMessageMatchers.hasNoUpdateEventMessage());
   }
 
   public void deletedMessagePublished(JsonObject holdings) {
     final var holdingsId = getId(holdings);
-    final var instanceId = getInstanceId(holdings);
 
-    awaitAtMost().until(() -> kafkaConsumer.getMessagesForHoldings(instanceId, holdingsId),
+    awaitAtMost().until(() -> kafkaConsumer.getMessagesForHoldings(holdingsId),
       eventMessageMatchers.hasDeleteEventMessageFor(holdings));
   }
 
   public void allHoldingsDeletedMessagePublished() {
     awaitAtMost()
-      .until(() -> kafkaConsumer.getMessagesForHoldings(NULL_ID, null),
+      .until(() -> kafkaConsumer.getMessagesForDeleteAllHoldings(NULL_ID, null),
         eventMessageMatchers.hasDeleteAllEventMessage());
   }
 }

@@ -52,15 +52,21 @@ public class CommonDomainEventPublisher<T> {
 
   public CommonDomainEventPublisher(Context vertxContext, Map<String, String> okapiHeaders,
                                     String kafkaTopic) {
+    this(vertxContext, okapiHeaders, kafkaTopic, 0);
+  }
 
-    this(okapiHeaders, kafkaTopic, createProducerManager(vertxContext),
+  public CommonDomainEventPublisher(Context vertxContext, Map<String, String> okapiHeaders,
+                                    String kafkaTopic, int maxRequestSize) {
+
+    this(okapiHeaders, kafkaTopic, createProducerManager(vertxContext, maxRequestSize),
       new LogToDbFailureHandler(vertxContext, okapiHeaders));
   }
 
-  private static KafkaProducerManager createProducerManager(Context vertxContext) {
+  private static KafkaProducerManager createProducerManager(Context vertxContext, int maxRequestSize) {
     var kafkaConfig = KafkaConfig.builder()
       .kafkaPort(KafkaEnvironmentProperties.port())
       .kafkaHost(KafkaEnvironmentProperties.host())
+      .maxRequestSize(maxRequestSize)
       .build();
 
     return new SimpleKafkaProducerManager(vertxContext.owner(), kafkaConfig);
@@ -187,8 +193,8 @@ public class CommonDomainEventPublisher<T> {
 
     return producer.send(producerRecord)
       .<Void>mapEmpty()
-      .eventually(x -> producer.flush())
-      .eventually(x -> producer.close())
+      .eventually(() -> producer.flush())
+      .eventually(() -> producer.close())
       .onFailure(cause -> {
         log.error("Unable to send domain event [{}], payload - [{}]",
           key, value, cause);

@@ -387,7 +387,7 @@
       "ginIndex": [
         {
           "fieldName": "identifiers",
-          "tOps": "ADD",
+          "tOps": "DELETE",
           "caseSensitive": false,
           "removeAccents": true
         }
@@ -419,13 +419,13 @@
         },
         {
           "fieldName": "contributors",
-          "tOps": "ADD",
+          "tOps": "DELETE",
           "caseSensitive": false,
           "removeAccents": true
         },
         {
           "fieldName": "publication",
-          "tOps": "ADD",
+          "tOps": "DELETE",
           "caseSensitive": false,
           "removeAccents": true
         },
@@ -624,6 +624,7 @@
         {
           "fieldName": "effectiveLocationId",
           "targetTable": "location",
+          "targetTableAlias": "effectiveLocation",
           "tOps": "ADD"
         },
         {
@@ -914,6 +915,10 @@
         {
           "fieldName": "name",
           "tOps": "ADD"
+        },
+        {
+          "fieldName": "code",
+          "tOps": "ADD"
         }
       ]
     }
@@ -923,11 +928,6 @@
       "run": "after",
       "snippetPath": "setPreviouslyHeldDefault.sql",
       "fromModuleVersion": "20.2.0"
-    },
-    {
-      "run": "before",
-      "snippetPath": "populateRmbInternalIndex.sql",
-      "fromModuleVersion": "19.1.1"
     },
     {
       "run": "before",
@@ -1063,21 +1063,6 @@
       "run": "after",
       "snippetPath": "inventory-hierarchy/addHoldingsIfItemsSuppressedItemsAndHoldingsView.sql",
       "fromModuleVersion": "22.0.0"
-    },
-    {
-      "run": "after",
-      "snippetPath": "itemStatisticalCodeReferenceCheckTrigger.sql",
-      "fromModuleVersion": "22.1.0"
-    },
-    {
-      "run": "after",
-      "snippetPath": "statisticalCodeTypesReferenceCheckTrigger.sql",
-      "fromModuleVersion": "25.0.0"
-    },
-    {
-      "run": "after",
-      "snippetPath": "statisticalCodeIdReferenceCheckTrigger.sql",
-      "fromModuleVersion": "23.1.0"
     },
     {
       "run": "after",
@@ -1218,6 +1203,76 @@
       "run": "after",
       "snippetPath": "publication-period/drop-publication-period-functions.sql",
       "fromModuleVersion": "27.2.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "subjectIdsReferenceCheckTrigger.sql",
+      "fromModuleVersion": "27.2.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "createIndexBarcodePattern.sql",
+      "fromModuleVersion": "28.0.3"
+    },
+    {
+      "run": "after",
+      "snippetPath": "createInstanceSubjectSourceTable.sql",
+      "fromModuleVersion": "28.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "createInstanceSubjectTypeTable.sql",
+      "fromModuleVersion": "28.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "populateDiscoverySuppressIfNotSet.sql",
+      "fromModuleVersion": "28.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "publication-period/drop-pub-period-migration-function.sql",
+      "fromModuleVersion": "28.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "inventory-hierarchy/updateRecordsViewFunctionToSupportLocationNameSeparately.sql",
+      "fromModuleVersion": "28.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "inventory-hierarchy/fixElectronicAccessOrder.sql",
+      "fromModuleVersion": "29.0.1"
+    },
+    {
+      "run": "after",
+      "snippetPath": "oaipmh/createDeletedIndex.sql",
+      "fromModuleVersion": "29.0.8"
+    },
+    {
+      "run": "after",
+      "snippetPath": "oaipmh/addMigrationToUpdateDeleted.sql",
+      "fromModuleVersion": "29.0.9"
+    },
+    {
+      "run": "after",
+      "snippetPath": "statistical-code/delete-deprecated-triggers.sql",
+      "fromModuleVersion": "29.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "statistical-code/create-intermediate-tables.sql",
+      "fromModuleVersion": "29.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "statistical-code/create-populate-triggers.sql",
+      "fromModuleVersion": "29.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "oaipmh/createDiscoverySuppressSourceIndex.sql",
+      "fromModuleVersion": "29.1.0"
     }
   ]
 }

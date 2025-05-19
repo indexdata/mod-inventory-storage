@@ -31,8 +31,8 @@ public final class EndpointFailureHandler {
     log.warn("Error occurred", error);
 
     Response response;
-    if (error instanceof ValidationException) {
-      response = validationHandler.apply(((ValidationException) error).getErrors());
+    if (error instanceof ValidationException validationException) {
+      response = validationHandler.apply(validationException.getErrors());
     } else {
       response = serverErrorHandler.apply(error.getMessage());
     }
@@ -40,7 +40,7 @@ public final class EndpointFailureHandler {
   }
 
   /**
-   * Use future.onError(handleFailure(asyncResultHandler, validationHandler, serverErrorHandler))
+   * Use future.onError(handleFailure(asyncResultHandler, validationHandler, serverErrorHandler)).
    */
   public static Handler<Throwable> handleFailure(
     Handler<AsyncResult<Response>> asyncResultHandler,
@@ -60,13 +60,13 @@ public final class EndpointFailureHandler {
       return textPlainResponse(400, error);
     } else if (error instanceof NotFoundException) {
       return textPlainResponse(404, error);
-    } else if (error instanceof ValidationException) {
-      final Errors errors = ((ValidationException) error).getErrors();
+    } else if (error instanceof ValidationException validationException) {
+      final Errors errors = validationException.getErrors();
       return failedValidationResponse(errors);
     } else if (PgExceptionUtil.isVersionConflict(error)) {
       return textPlainResponse(409, error);
-    } else if (error instanceof ResponseException) {
-      return ((ResponseException) error).getResponse();
+    } else if (error instanceof ResponseException responseException) {
+      return responseException.getResponse();
     }
     String message = PgExceptionUtil.badRequestMessage(error);
     if (message != null) {

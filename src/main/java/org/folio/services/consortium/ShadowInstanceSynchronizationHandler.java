@@ -43,7 +43,7 @@ public class ShadowInstanceSynchronizationHandler implements AsyncRecordHandler<
   private static final String EVENT_HANDLING_ERROR_MSG =
     "handle:: Failed to handle event for shadow instances synchronization, centralTenantId: '{}', instanceId: '{}'";
   private static final String SHARING_INSTANCES_PATH =
-    "/consortia/%s/sharing/instances?status=COMPLETE&instanceIdentifier=%s"; //NOSONAR
+    "/consortia/%s/sharing/instances?status=COMPLETE&instanceIdentifier=%s";
   private static final String INSTANCES_PARALLEL_UPDATES_COUNT_PARAM =
     "instance-synchronization.parallel.updates.count";
   private static final String DEFAULT_INSTANCES_PARALLEL_UPDATES_COUNT = "10";
@@ -99,12 +99,12 @@ public class ShadowInstanceSynchronizationHandler implements AsyncRecordHandler<
   }
 
   private boolean isCentralTenantId(String tenantId, ConsortiumData consortiumData) {
-    return tenantId.equals(consortiumData.getCentralTenantId());
+    return tenantId.equals(consortiumData.centralTenantId());
   }
 
   private Future<Void> synchronizeShadowInstances(DomainEvent<Instance> event, String instanceId,
                                                   ConsortiumData consortiumData, Map<String, String> headers) {
-    return getShadowInstancesTenantIds(consortiumData.getConsortiumId(), consortiumData.getCentralTenantId(),
+    return getShadowInstancesTenantIds(consortiumData.consortiumId(), consortiumData.centralTenantId(),
       instanceId, headers)
       .compose(tenantIds -> updateShadowInstances(event, tenantIds, headers));
   }
@@ -147,7 +147,7 @@ public class ShadowInstanceSynchronizationHandler implements AsyncRecordHandler<
 
       Future<CompositeFuture> future = Future.succeededFuture();
       for (List<String> tenantsChunk : tenantsChunks) {
-        future = future.eventually(v -> updateShadowInstances(tenantsChunk, instance, headers));
+        future = future.eventually(() -> updateShadowInstances(tenantsChunk, instance, headers));
       }
       return future.mapEmpty();
     } catch (Exception e) {
@@ -174,10 +174,13 @@ public class ShadowInstanceSynchronizationHandler implements AsyncRecordHandler<
     HashMap<String, String> headers = new HashMap<>(okapiHeaders);
     headers.put(TENANT, tenantId);
     InstanceRepository instanceRepository = new InstanceRepository(vertx.getOrCreateContext(), headers);
+    // Creates a copy of the instance to prevent side effects during instance version population
+    Instance instanceToUpdate = JsonObject.mapFrom(instance).mapTo(Instance.class);
 
     return instanceRepository.getById(instance.getId())
       .map(Instance::getVersion)
-      .compose(currentVersion -> instanceRepository.update(instance.getId(), instance.withVersion(currentVersion)))
+      .compose(currentVersion ->
+        instanceRepository.update(instanceToUpdate.getId(), instanceToUpdate.withVersion(currentVersion)))
       .onFailure(e -> LOG.warn(
         "updateShadowInstance:: Error during shadow instance update, tenantId: '{}', instanceId: '{}'",
         tenantId, instance.getId(), e))

@@ -31,7 +31,8 @@ import org.folio.rest.persist.PostgresClientFuturized;
 
 public final class AsyncMigrationJobService {
   private static final List<AsyncMigrationJobRunner> MIGRATION_JOB_RUNNERS = List
-    .of(new ShelvingOrderMigrationJobRunner(), new SubjectSeriesMigrationJobRunner());
+    .of(new ShelvingOrderMigrationJobRunner(),
+      new SubjectSeriesMigrationJobRunner());
   private static final List<AsyncMigrationJob.JobStatus> ACCEPTABLE_STATUSES = List
     .of(AsyncMigrationJob.JobStatus.IN_PROGRESS, IDS_PUBLISHED);
 
@@ -177,7 +178,7 @@ public final class AsyncMigrationJobService {
     var availableMigrations = getAvailableMigrations().getAsyncMigrations()
       .stream().flatMap(v -> Stream.of(v.getMigrations())).toList()
       .stream().flatMap(List::stream).toList();
-    return availableMigrations.containsAll(jobRequest.getMigrations());
+    return new HashSet<>(availableMigrations).containsAll(jobRequest.getMigrations());
   }
 
   private AsyncMigrationJob buildInitialJob(AsyncMigrationJobRequest request) {

@@ -14,10 +14,12 @@ import static org.folio.rest.persist.PgUtil.post;
 import static org.folio.rest.persist.PgUtil.postSync;
 import static org.folio.rest.persist.PgUtil.postgresClient;
 import static org.folio.services.batch.BatchOperationContextFactory.buildBatchOperationContext;
+import static org.folio.utils.ComparisonUtils.equalsIgnoringMetadata;
 import static org.folio.validator.HridValidators.refuseWhenHridChanged;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vertx.core.AsyncResult;
-import io.vertx.core.CompositeFuture;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -26,15 +28,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
+import org.folio.dbschema.ObjectMapperTool;
 import org.folio.persist.HoldingsRepository;
 import org.folio.persist.InstanceRepository;
 import org.folio.rest.jaxrs.model.HoldingsRecord;
 import org.folio.rest.jaxrs.model.Item;
-import org.folio.rest.persist.Criteria.Criteria;
-import org.folio.rest.persist.Criteria.Criterion;
 import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.persist.SQLConnection;
 import org.folio.rest.support.CqlQuery;
@@ -53,6 +56,16 @@ import org.folio.validator.NotesValidators;
 
 public class HoldingsService {
   private static final Logger log = getLogger(HoldingsService.class);
+  private static final ObjectMapper OBJECT_MAPPER = ObjectMapperTool.getMapper();
+  private static final Pattern INSTANCEID_PATTERN = Pattern.compile(
+      "^ *instanceId *== *\"?("
+      // UUID
+      + "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+      + ")\"?"
+      + " +sortBy"
+      // allow any sub-set of the fields and allow the fields in any order
+      + "(( +(effectiveLocation\\.name|callNumberPrefix|callNumber|callNumberSuffix))+) *$");
+
   private final Context vertxContext;
   private final Map<String, String> okapiHeaders;
   private final PostgresClient postgresClient;
@@ -80,6 +93,35 @@ public class HoldingsService {
   }
 
   /**
+   * Returns Response if the query is supported by instanceId query, null otherwise.
+   *
+   * <p>
+   */
+  public Future<Response> getByInstanceId(int offset, int limit, String query) {
+    if (query == null) {
+      return Future.succeededFuture();
+    }
+    var matcher = INSTANCEID_PATTERN.matcher(query);
+    if (!matcher.find()) {
+      return Future.succeededFuture();
+    }
+    var instanceId = matcher.group(1);
+    var sortBy = matcher.group(2).split(" +");
+    return holdingsRepository.getByInstanceId(instanceId, sortBy, offset, limit)
+        .map(row -> {
+          var json = "{ \"holdingsRecords\": " + row.getString("holdings") + ",\n"
+              + "  \"totalRecords\": " + row.getLong("total_records") + ",\n"
+              + "  \"resultInfo\": { \n"
+              + "    \"totalRecords\": " + row.getLong("total_records") + ",\n"
+              + "    \"totalRecordsEstimated\": false\n"
+              + "  }\n"
+              + "}";
+          return Response.ok(json, MediaType.APPLICATION_JSON).build();
+        })
+        .onFailure(e -> log.error("getByInstanceId:: {}", e.getMessage(), e));
+  }
+
+  /**
    * Deletes all holdings but sends only a single domain event (Kafka) message "all records removed",
    * this is much faster than sending one message for each deleted holding.
    */
@@ -103,10 +145,7 @@ public class HoldingsService {
   public Future<Response> createHolding(HoldingsRecord entity) {
     entity.setEffectiveLocationId(calculateEffectiveLocation(entity));
 
-    return consortiumService.getConsortiumData(okapiHeaders)
-      .compose(consortiumDataOptional -> consortiumDataOptional
-        .map(consortiumData -> createShadowInstanceIfNeeded(entity.getInstanceId(), consortiumData).mapEmpty())
-        .orElse(Future.succeededFuture()))
+    return createShadowInstancesIfNeeded(List.of(entity))
       .compose(v -> hridManager.populateHrid(entity))
       .compose(NotesValidators::refuseLongNotes)
       .compose(hr -> {
@@ -148,8 +187,15 @@ public class HoldingsService {
     // https://sonarcloud.io/organizations/folio-org/rules?open=java%3AS1602&rule_key=java%3AS1602
     return holdingsRepository.delete(cql)
       .onSuccess(rowSet -> vertxContext.runOnContext(runLater ->
-        rowSet.iterator().forEachRemaining(row ->
-          domainEventPublisher.publishRemoved(row.getString(0), row.getString(1))
+        rowSet.iterator().forEachRemaining(row -> {
+            try {
+              var holdingId = OBJECT_MAPPER.readTree(row.getString(1)).get("id").textValue();
+              domainEventPublisher.publishRemoved(holdingId, row.getString(1));
+            } catch (JsonProcessingException ex) {
+              log.error("deleteHoldings:: Failed to parse json : {}", ex.getMessage(), ex);
+              throw new IllegalArgumentException(ex.getCause());
+            }
+          }
         )
       ))
       .map(Response.noContent().build());
@@ -160,58 +206,61 @@ public class HoldingsService {
       holdingsRecord.setEffectiveLocationId(calculateEffectiveLocation(holdingsRecord));
     }
 
-    return consortiumService.getConsortiumData(okapiHeaders)
-      .compose(consortiumDataOptional -> {
-        if (consortiumDataOptional.isPresent()) {
-          return createShadowInstancesIfNeeded(holdings, consortiumDataOptional.get());
-        }
-        return Future.succeededFuture();
-      })
+    return createShadowInstancesIfNeeded(holdings)
       .compose(ar -> hridManager.populateHridForHoldings(holdings)
         .compose(NotesValidators::refuseHoldingLongNotes)
         .compose(result -> buildBatchOperationContext(upsert, holdings,
-          holdingsRepository, HoldingsRecord::getId))
+          holdingsRepository, HoldingsRecord::getId, true))
         .compose(batchOperation -> postSync(HOLDINGS_RECORD_TABLE, holdings, MAX_ENTITIES,
           upsert, optimisticLocking, okapiHeaders, vertxContext, PostHoldingsStorageBatchSynchronousResponse.class)
           .onSuccess(domainEventPublisher.publishCreatedOrUpdated(batchOperation))))
       .map(ResponseHandlerUtil::handleHridError);
   }
 
-  public Future<Void> publishReindexHoldingsRecords(String rangeId, String idStart, String idEnd) {
-    var criteriaFrom = new Criteria().setJSONB(false)
-      .addField("id").setOperation(">=").setVal(idStart);
-    var criteriaTo = new Criteria().setJSONB(false)
-      .addField("id").setOperation("<=").setVal(idEnd);
-    final Criterion criterion = new Criterion(criteriaFrom)
-      .addCriterion(criteriaTo);
-
-    return holdingsRepository.get(criterion)
+  public Future<Void> publishReindexHoldingsRecords(String rangeId, String fromId, String toId) {
+    return holdingsRepository.getReindexHoldingsRecords(fromId, toId)
       .compose(holdings -> domainEventPublisher.publishReindexHoldings(rangeId, holdings));
   }
 
   private Future<Response> updateHolding(HoldingsRecord oldHoldings, HoldingsRecord newHoldings) {
     newHoldings.setEffectiveLocationId(calculateEffectiveLocation(newHoldings));
 
-    if (Integer.valueOf(-1).equals(newHoldings.getVersion())) {
-      newHoldings.setVersion(null);  // enforce optimistic locking
-    }
+    return createShadowInstancesIfNeeded(List.of(newHoldings))
+      .compose(v -> {
+        try {
+          var noChanges = equalsIgnoringMetadata(oldHoldings, newHoldings);
+          if (noChanges) {
+            return Future.succeededFuture()
+              .map(res -> PutHoldingsStorageHoldingsByHoldingsRecordIdResponse.respond204());
+          }
+        } catch (Exception e) {
+          return Future.failedFuture(e);
+        }
 
-    return refuseWhenHridChanged(oldHoldings, newHoldings)
-      .compose(notUsed -> NotesValidators.refuseLongNotes(newHoldings))
-      .compose(notUsed -> {
-        final Promise<List<Item>> overallResult = promise();
+        if (Integer.valueOf(-1).equals(newHoldings.getVersion())) {
+          newHoldings.setVersion(null);  // enforce optimistic locking
+        }
 
-        postgresClient.startTx(
-          connection -> holdingsRepository.update(connection, oldHoldings.getId(), newHoldings)
-            .compose(updateRes -> itemService.updateItemsOnHoldingChanged(connection, newHoldings))
-            .onComplete(handleTransaction(connection, overallResult)));
+        return refuseWhenHridChanged(oldHoldings, newHoldings)
+          .compose(notUsed -> NotesValidators.refuseLongNotes(newHoldings))
+          .compose(notUsed -> {
+            final Promise<List<Item>> overallResult = promise();
 
-        return overallResult.future()
-          .compose(itemsBeforeUpdate -> itemEventService.publishUpdated(oldHoldings, newHoldings, itemsBeforeUpdate))
-          .<Response>map(res -> PutHoldingsStorageHoldingsByHoldingsRecordIdResponse.respond204())
-          .onSuccess(domainEventPublisher.publishUpdated(oldHoldings));
+            postgresClient.startTx(
+              connection -> holdingsRepository.update(connection, oldHoldings.getId(), newHoldings)
+                .compose(updateRes -> itemService.updateItemsOnHoldingChanged(connection, newHoldings))
+                .onComplete(handleTransaction(connection, overallResult))
+            );
+
+            return overallResult.future()
+              .compose(itemsBeforeUpdate -> itemEventService
+                .publishUpdated(oldHoldings, newHoldings, itemsBeforeUpdate))
+              .<Response>map(res -> PutHoldingsStorageHoldingsByHoldingsRecordIdResponse.respond204())
+              .onSuccess(domainEventPublisher.publishUpdated(oldHoldings));
+          });
       });
   }
+
 
   private String calculateEffectiveLocation(HoldingsRecord holdingsRecord) {
     String permanentLocationId = holdingsRecord.getPermanentLocationId();
@@ -249,7 +298,17 @@ public class HoldingsService {
     };
   }
 
-  private CompositeFuture createShadowInstancesIfNeeded(List<HoldingsRecord> holdingsRecords,
+  private Future<Void> createShadowInstancesIfNeeded(List<HoldingsRecord> holdingsRecords) {
+    return consortiumService.getConsortiumData(okapiHeaders)
+        .compose(consortiumDataOptional -> {
+          if (consortiumDataOptional.isPresent()) {
+            return createShadowInstancesIfNeeded(holdingsRecords, consortiumDataOptional.get());
+          }
+          return Future.succeededFuture();
+        });
+  }
+
+  private Future<Void> createShadowInstancesIfNeeded(List<HoldingsRecord> holdingsRecords,
                                                         ConsortiumData consortiumData) {
     Map<String, Future<SharingInstance>> instanceFuturesMap = new HashMap<>();
 
@@ -257,19 +316,15 @@ public class HoldingsService {
       String instanceId = holdingRecord.getInstanceId();
       instanceFuturesMap.computeIfAbsent(instanceId, v -> createShadowInstanceIfNeeded(instanceId, consortiumData));
     }
-    return Future.all(new ArrayList<>(instanceFuturesMap.values()));
+    return Future.all(new ArrayList<>(instanceFuturesMap.values()))
+        .mapEmpty();
   }
 
   private Future<SharingInstance> createShadowInstanceIfNeeded(String instanceId, ConsortiumData consortiumData) {
-    return instanceRepository.getById(instanceId)
-      .compose(instance -> {
-        if (instance != null) {
-          return Future.succeededFuture();
-        }
-        log.info("createShadowInstanceIfNeeded:: instance with id: {} is not found in local tenant."
-          + " Trying to create a shadow instance", instanceId);
-        return consortiumService.createShadowInstance(instanceId, consortiumData, okapiHeaders);
-      });
+    return instanceRepository.exists(instanceId)
+      .compose(exists -> Boolean.TRUE.equals(exists) ? Future.succeededFuture() :
+        consortiumService.createShadowInstance(instanceId, consortiumData, okapiHeaders)
+      );
   }
 
   private boolean holdingsRecordFound(HoldingsRecord holdingsRecord) {

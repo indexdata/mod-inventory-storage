@@ -8,9 +8,7 @@ import static org.folio.utility.RestUtility.TENANT_ID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
-import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpClient;
 import io.vertx.junit5.VertxTestContext;
@@ -19,7 +17,6 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import org.assertj.core.api.InstanceOfAssertFactories;
-import org.folio.HttpStatus;
 import org.folio.rest.jaxrs.model.Metadata;
 import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.persist.cql.CQLWrapper;
@@ -72,16 +69,12 @@ abstract class BaseReferenceDataIntegrationTest<T, C> extends BaseIntegrationTes
     }
   }
 
-  protected static Handler<AsyncResult<TestResponse>> verifyStatus(VertxTestContext ctx, HttpStatus expectedStatus) {
-    return ctx.succeeding(response -> ctx.verify(() -> assertEquals(expectedStatus.toInt(), response.status())));
-  }
-
   protected Metadata getMetadata(T createdRecord) {
     return metadataExtractor().apply(createdRecord);
   }
 
-  protected String getRecordId(T record) {
-    return idExtractor().apply(record);
+  protected String getRecordId(T recordObj) {
+    return idExtractor().apply(recordObj);
   }
 
   protected String getRecordId(TestResponse response) {
@@ -135,7 +128,7 @@ abstract class BaseReferenceDataIntegrationTest<T, C> extends BaseIntegrationTes
                 .extracting(collectionRecordsExtractor()).asInstanceOf(InstanceOfAssertFactories.COLLECTION)
                 .hasSize(1);
 
-              var collectionRecord = collectionRecordsExtractor().apply(collection).get(0);
+              var collectionRecord = collectionRecordsExtractor().apply(collection).getFirst();
 
               verifyRecordFields(collectionRecord, newRecord, recordFieldExtractors(),
                 String.format("verify collection's record for query: %s", query));

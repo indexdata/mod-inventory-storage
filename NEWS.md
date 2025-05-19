@@ -1,46 +1,141 @@
-## v27.2.0 In progress
-
+## v29.1.0 YYYY-mm-DD
 ### Breaking changes
+* Description ([ISSUE](https://folio-org.atlassian.net/browse/ISSUE))
+
+### New APIs versions
+* Provides `item-storage 10.2`
+
+### Features
+* Make max.request.size configurable for reindex holdings/items producers ([MODINVSTOR-1372](https://folio-org.atlassian.net/browse/MODINVSTOR-1372))
+* Create index for discoverySuppress and source fields to improve performance of queries which include mentioned fields ([MODINVSTOR-1377](https://folio-org.atlassian.net/browse/MODINVSTOR-1377))
+* Introduce new post retrieve api to fetch inventory item ([MODINVSTOR-1381](https://folio-org.atlassian.net/browse/MODINVSTOR-1381))
+* Optimize reindex instances database fetch query ([MODINVSTOR-1395](https://folio-org.atlassian.net/browse/MODINVSTOR-1395))
+* Create index for "deleted" field to improve performance of mod-oai-pmh views ([MODOAIPMH-614](https://folio-org.atlassian.net/browse/MODOAIPMH-614))
+* Execute migration script to add "deleted" field to instance.jsonb if it's missing ([MODINVSTOR-1425](https://folio-org.atlassian.net/browse/MODINVSTOR-1425))
+
+### Bug fixes
+* Fix ordering of electronic access items for inventory-hierarchy, oai-pmh-view ([MODINVSTOR-1224](https://folio-org.atlassian.net/browse/MODINVSTOR-1224))
+* Fix error serialization when writing to files uploaded to S3 ([MODINVSTOR-1389](https://folio-org.atlassian.net/browse/MODINVSTOR-1389))
+* Fix changes propagation to shadow instances after shared instance update ([MODINVSTOR-1393](https://folio-org.atlassian.net/browse/MODINVSTOR-1393))
+
+### Tech Dept
+* Description ([ISSUE](https://folio-org.atlassian.net/browse/ISSUE))
+
+### Dependencies
+* Bump `LIB_NAME` from `OLD_VERSION` to `NEW_VERSION`
+* Add `LIB_NAME VERSION`
+* Remove `LIB_NAME`
+
+---
+
+## v29.0.0 2025-03-13
+### Breaking changes
+* Upgrade to Java 21 ([MODINVSTOR-1364](https://folio-org.atlassian.net/browse/MODINVSTOR-1364))
+* Remove deprecated batch API `/instance-storage/batch/instances`  ([MODINVSTOR-1182](https://folio-org.atlassian.net/browse/MODINVSTOR-1182))
+
+### New APIs versions
+* Provides `inventory-hierarchy 0.6`
+* Provides `instance-storage v11.1`
+* Disables `instance-storage-batch`
+
+### Features
+* Add new location property locationName that points to location name. ([MODINVSTOR-1362](https://folio-org.atlassian.net/browse/MODINVSTOR-1362))
+* Update rollback mechanism for instances when linking/unlinking with subjects is failed. ([MODINVSTOR-1299](https://folio-org.atlassian.net/browse/MODINVSTOR-1299))
+* Unable to delete local Subject types/sources when they are linked to an Instance ([MODINVSTOR-1284](https://folio-org.atlassian.net/browse/MODINVSTOR-1284))
+* Modify endpoint for bulk instances upsert with publish events flag ([MODINVSTOR-1283](https://folio-org.atlassian.net/browse/MODINVSTOR-1283))
+* Change Kafka event publishing keys for holdings and items ([MODINVSTOR-1281](https://folio-org.atlassian.net/browse/MODINVSTOR-1281))
+* Merge custom ECS TLR feature branch into master ([MODINVSTOR-1262](https://folio-org.atlassian.net/browse/MODINVSTOR-1262))
+* Service points synchronization: implement processors ([MODINVSTOR-1246](https://folio-org.atlassian.net/browse/MODINVSTOR-1246))
+* Service points synchronization: create a verticle ([MODINVSTOR-1245](https://folio-org.atlassian.net/browse/MODINVSTOR-1245))
+* Do not return routing service points by default ([MODINVSTOR-1219](https://folio-org.atlassian.net/browse/MODINVSTOR-1219))
+* Implement Kafka Event Publishing for Call-Number Type CRUD Operations ([MODINVSTOR-1275](https://folio-org.atlassian.net/browse/MODINVSTOR-1275))
+* Extend domain events with eventId and eventTs ([MODINVSTOR-1322](https://folio-org.atlassian.net/browse/MODINVSTOR-1322))
+* Revert the publication period migration changes ([MODINVSTOR-1280](https://folio-org.atlassian.net/browse/MODINVSTOR-1280))
+* Optimize check for existing shadow Instance before creating it ([MODINVSTOR-1354](https://folio-org.atlassian.net/browse/MODINVSTOR-1354))
+* Add "deleted" field to Instance schema ([MODINVSTOR-1342](https://folio-org.atlassian.net/browse/MODINVSTOR-1342))
+* Perform bulk in transaction to prevent Optimistic Locking ([MODINVSTOR-1369](https://folio-org.atlassian.net/browse/MODINVSTOR-1369))
+* Prevent update of instance/item/holdings in case there are no changes ([MODINVSTOR-1363](https://folio-org.atlassian.net/browse/MODINVSTOR-1363))
+
+### Bug fixes
+* Add item barcode right truncation search index ([MODINVSTOR-1292](https://folio-org.atlassian.net/browse/MODINVSTOR-1292))
+* Sort holdings by location name in instanceId query ([MODINVSTOR-1343](https://folio-org.atlassian.net/browse/MODINVSTOR-1343))
+
+### Tech Dept
+* Delete 3 unused instance database indexes ([MODINVSTOR-1277](https://folio-org.atlassian.net/browse/MODINVSTOR-1277))
+
+### Dependencies
+* Bump `raml-module-builder` from `35.3.0` to `35.4.0`
+* Bump `folio-kafka-wrapper` from `3.2.0` to `3.3.1`
+* Bump `folio-s3-client` from `2.2.0` to `2.3.0`
+* Bump `vertx` from `4.5.10` to `4.5.13`
+* Bump `caffeine` from `3.1.8` to `3.2.0`
+* Bump `lombok` from `1.18.34` to `1.18.36`
+* Bump `log4j` from `2.24.1` to `2.24.3`
+* Remove `google-code-gson`
+
+---
+
+## v28.0.0 2024-11-01
+### Breaking changes
+* Migrate "publicationPeriod" data to the Dates object and remove it from the Instance schema ([MODINVSTOR-1232](https://folio-org.atlassian.net/browse/MODINVSTOR-1232))
+* Delete deprecated `shelf-locations` API ([MODINVSTOR-1183](https://folio-org.atlassian.net/browse/MODINVSTOR-1183))
 * Required sourceId field in holdings record ([MODINVSTOR-1161](https://folio-org.atlassian.net/browse/MODINVSTOR-1161))
 
 ### New APIs versions
+* Provides `instance-storage 11.0`
+* Provides `instance-storage-batch 3.0`
+* Provides `instance-storage-batch-sync 3.0`
+* Provides `instance-storage-batch-sync-unsafe 3.0`
+* Provides `inventory-view 3.0`
+* Provides `inventory-view-instance-set 3.0`
+* Provides `instance-iteration 1.0`
+* Provides `holdings-storage 8.0`
+* Provides `bound-with-parts-storage 2.0`
+* Provides `async-migration 1.0`
 * Provides `subject-source 1.0`
 * Provides `subject-types 1.0`
+* Provides `instance-storage-bulk 1.0`
 * Provides `instance-date-types 1.0`
-* Provides `instance-storage 10.2`
-* Requires `holdings-storage 6.1`
+* Provides `locations 3.1`
+
+### Removed APIs
+* `shelf-locations`
 
 ### Features
+* Add floating collection flag in location schema ([MODINVSTOR-1250](https://issues.folio.org/browse/MODINVSTOR-1250))
 * Implement domain event production for location create/update/delete ([MODINVSTOR-1181](https://issues.folio.org/browse/MODINVSTOR-1181))
+* Add a new boolean field ecsRequestRouting to the service point schema ([MODINVSTOR-1179](https://issues.folio.org/browse/MODINVSTOR-1179))
 * Implement domain event production for library create/update/delete ([MODINVSTOR-1216](https://issues.folio.org/browse/MODINVSTOR-1216))
 * Implement domain event production for campus create/update/delete ([MODINVSTOR-1217](https://issues.folio.org/browse/MODINVSTOR-1217))
 * Implement domain event production for institution create/update/delete ([MODINVSTOR-1218](https://issues.folio.org/browse/MODINVSTOR-1218))
 * Implement a POST request to get Holdings and Instances ([MODINVSTOR-1223](https://folio-org.atlassian.net/browse/MODINVSTOR-1223))
 * Implement instance-date-types endpoint ([MODINVSTOR-1235](https://folio-org.atlassian.net/browse/MODINVSTOR-1235))
+* Restrict instance-date-type changes to central tenant ([MODINVSTOR-1238](https://folio-org.atlassian.net/browse/MODINVSTOR-1238))
 * Implement Subject types management ([MODINVSTOR-1221](https://folio-org.atlassian.net/browse/MODINVSTOR-1221))
 * Implement endpoint to publish reindex event for the range of instance/item/holding records ([MODINVSTOR-1230](https://folio-org.atlassian.net/browse/MODINVSTOR-1230))
 * Info, not warn, about expected 403 from /user-tenants ([MODINVSTOR-1237](https://folio-org.atlassian.net/browse/MODINVSTOR-1237))
 * Implement Subject sources management ([MODINVSTOR-1222](https://folio-org.atlassian.net/browse/MODINVSTOR-1222))
 * Add new date type fields to Instance schema ([MODINVSTOR-1188](https://folio-org.atlassian.net/browse/MODINVSTOR-1188))
-
+* Implement endpoint for bulk instances upsert from external file ([MODINVSTOR-1225](https://folio-org.atlassian.net/browse/MODINVSTOR-1225))
+* Add Subject source and Subject type to schema ([MODINVSTOR-1205](https://folio-org.atlassian.net/browse/MODINVSTOR-1205))
+* Add codes to Subject sources ([MODINVSTOR-1264](https://folio-org.atlassian.net/browse/MODINVSTOR-1264))
+* Implement publication period migration, create new InstanceWithoutPubPeriod schema for request/response API ([MODINVSTOR-1271](https://folio-org.atlassian.net/browse/MODINVSTOR-1271))
 
 ### Bug fixes
 * Unintended update of instance records \_version (optimistic locking) whenever any of its holdings or items are created, updated or deleted. ([MODINVSTOR-1186](https://folio-org.atlassian.net/browse/MODINVSTOR-1186))
 * Deserialization of Date from long (MODINVSTOR-1198)[https://folio-org.atlassian.net/browse/MODINVSTOR-1198]
 * Do not delete Kafka topics on postTenant if collection topics is enabled ([MODINVSTOR-1192](https://folio-org.atlassian.net/browse/MODINVSTOR-1192))
 * Identifier types: change Cancelled LCCN to Canceled LCCN ([MODINVSTOR-1212](https://folio-org.atlassian.net/browse/MODINVSTOR-1212))
+* Add user-tenants.collection.get to all ECS APIs ([MODINVSTOR-1253](https://folio-org.atlassian.net/browse/MODINVSTOR-1253))
+* Add user-tenants.collection.get to POST /\_/tenant API ([MODINVSTOR-1260](https://folio-org.atlassian.net/browse/MODINVSTOR-1260))
+* Update "BC" name in GET instance-date-type to "B.C." ([MODINVSTOR-1255](https://folio-org.atlassian.net/browse/MODINVSTOR-1255))
 
 ### Tech Dept
-* Description ([ISSUE\_NUMBER](https://folio-org.atlassian.net/browse/ISSUE_NUMBER))
+* Upgrade localstack from 0.11.3 to s3-latest (=3.8.0) ([MODINVSTOR-1272](https://folio-org.atlassian.net/browse/MODINVSTOR-1272))
+* Add module descriptor validator plugin and fix the permission names ([MODINVSTOR-1247](https://folio-org.atlassian.net/browse/MODINVSTOR-1247))
+* Kafka testcontainers: kafka.KafkaContainer, apache/kafka-native:3.8.0, KafkaTopicsExistsTest fix ([MODINVSTOR-1251](https://folio-org.atlassian.net/browse/MODINVSTOR-1251))
 
-### Dependencies
-* Bump `LIB_NAME` from `OLD_VERSION` to `NEW_VERSION`
-* Bump `domain-models-runtime` from `35.2.0` to `35.2.2`
-* Bump `holdings-storage` from `6.0` to `7.0`
-* Bump `holdings-storage-batch-sync` from `1.1` to `2.0`
-* Bump `holdings-storage-batch-sync-unsafe` from `1.0` to `2.0`
-* Add `LIB_NAME` `2.7.4`
-* Remove `LIB_NAME`
+---
 
 ## v27.1.0 2024-03-19
 ### New APIs versions
@@ -62,7 +157,6 @@
 * Prevent virtual fields populating for holdings records ([MODINVSTOR-1094](https://issues.folio.org/browse/MODINVSTOR-1094))
 * Create base for reference data APIs integration tests ([MODINVSTOR-1164](https://issues.folio.org/browse/MODINVSTOR-1164))
 * Make response message more informative for hrid exceptions ([MODINVSTOR-1100](https://issues.folio.org/browse/MODINVSTOR-1100))
-
 
 ### Dependencies
 * Bump `vertx` from `4.3.5` to `4.5.5`

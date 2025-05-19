@@ -41,9 +41,10 @@ public class KafkaAdminClientServiceTest {
     "folio.foo-tenant.inventory.bound-with", "folio.foo-tenant.inventory.async-migration",
     "folio.foo-tenant.inventory.service-point", "folio.foo-tenant.inventory.classification-type",
     "folio.foo-tenant.inventory.location", "folio.foo-tenant.inventory.library",
-    "folio.foo-tenant.inventory.campus", "folio.foo-tenant.inventory.subject-types",
+    "folio.foo-tenant.inventory.campus", "folio.foo-tenant.inventory.subject-type",
     "folio.foo-tenant.inventory.institution", "folio.foo-tenant.inventory.reindex-records",
-    "folio.foo-tenant.inventory.subject-sources");
+    "folio.foo-tenant.inventory.subject-source", "folio.foo-tenant.inventory.instance-date-type",
+    "folio.foo-tenant.inventory.call-number-type");
   private KafkaAdminClient mockClient;
   private Vertx vertx;
 
@@ -118,7 +119,7 @@ public class KafkaAdminClientServiceTest {
   }
 
   private List<String> getTopicNames(ArgumentCaptor<List<NewTopic>> createTopicsCaptor) {
-    return createTopicsCaptor.getAllValues().get(0).stream()
+    return createTopicsCaptor.getAllValues().getFirst().stream()
       .map(NewTopic::getName)
       .toList();
   }

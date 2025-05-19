@@ -190,6 +190,16 @@
             "type": "string",
             "description": "UUID of authority record that controls a subject heading",
             "$ref": "uuid.json"
+          },
+          "sourceId": {
+            "type": "string",
+            "description": "UUID of subject source",
+            "$ref": "uuid.json"
+          },
+          "typeId": {
+            "type": "string",
+            "description": "UUID of subject type",
+            "$ref": "uuid.json"
           }
         },
         "additionalProperties": false,
@@ -275,21 +285,6 @@
         "type": "string"
       },
       "uniqueItems": true
-    },
-    "publicationPeriod": {
-      "type": "object",
-      "description": "Publication period",
-      "properties": {
-        "start": {
-          "type": "integer",
-          "description": "Publication start year"
-        },
-        "end": {
-          "type": "integer",
-          "description": "Publication end year"
-        }
-      },
-      "additionalProperties": false
     },
     "electronicAccess": {
       "type": "array",
@@ -442,6 +437,11 @@
     "discoverySuppress": {
       "type": "boolean",
       "description": "Records the fact that the record should not be displayed in a discovery system",
+      "default": false
+    },
+    "deleted": {
+      "type": "boolean",
+      "description": "Indicates whether the record was marked for deletion",
       "default": false
     },
     "statisticalCodeIds": {
