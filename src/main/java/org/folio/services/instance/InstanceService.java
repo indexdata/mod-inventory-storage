@@ -140,15 +140,15 @@ public class InstanceService {
                 return Future.succeededFuture(respond400WithTextPlain(response.getEntity()));
               }
             })
-            .onSuccess(postResponse::complete)
-            .onFailure(throwable -> {
-              if (throwable instanceof PgException pgException) {
-                postResponse.complete(respond400WithTextPlain(pgException.getDetail()));
-              } else {
-                postResponse.complete(respond400WithTextPlain(throwable.getMessage()));
-              }
-            })
-        );
+        )
+          .onSuccess(postResponse::complete)
+          .onFailure(throwable -> {
+            if (throwable instanceof PgException pgException) {
+              postResponse.complete(respond400WithTextPlain(pgException.getDetail()));
+            } else {
+              postResponse.complete(respond400WithTextPlain(throwable.getMessage()));
+            }
+          });
 
         return postResponse.future()
             // Return the response without waiting for a domain event publish
@@ -241,9 +241,8 @@ public class InstanceService {
         }
         logger.debug("postSyncInstance:: Setting version to -1 for instances");
         OptimisticLockingUtil.setVersionToMinusOne(instances);
-
-        MetadataUtil.populateMetadata(instances, okapiHeaders);
       }
+      MetadataUtil.populateMetadata(instances, okapiHeaders);
       Future<RowSet<Row>> result = upsert
         ? conn.upsertBatch(INSTANCE_TABLE, instances)
         : conn.saveBatch(INSTANCE_TABLE, instances);

@@ -45,6 +45,8 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.collection.IsIterableContainingInAnyOrder.containsInAnyOrder;
 import static org.hamcrest.core.IsNull.notNullValue;
 import static org.joda.time.Seconds.seconds;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
 import io.vertx.core.json.JsonArray;
@@ -1423,7 +1425,6 @@ public class InstanceStorageTest extends TestBaseWithInventoryUtil {
     canSort(format("holdingsRecords.permanentLocationId=\"%s\" sortBy title/sort.descending", MAIN_LIBRARY_LOCATION_ID),
       "Nod", "Long Way to a Small Angry Planet");
     System.out.println("canSearchByBarcodeAndPermanentLocation");
-
   }
 
   // This is intended to demonstrate that instances without holdings or items
@@ -1769,7 +1770,6 @@ public class InstanceStorageTest extends TestBaseWithInventoryUtil {
     assertThat(instances.size(), is(1));
     assertThat(instanceTags.get(tagListKey), hasItem(tagValue));
     assertThat(instancesJsonResponse.getInteger(TOTAL_RECORDS_KEY), is(1));
-
   }
 
   @Test
@@ -1930,6 +1930,18 @@ public class InstanceStorageTest extends TestBaseWithInventoryUtil {
       .toList();
 
     instanceMessageChecks.createdMessagesPublished(createdInstances);
+  }
+
+  @Test
+  public void instancesCreatedInBatchSynchShouldHaveMetadata() throws Exception {
+    JsonObject instanceCollection = createRequestForMultipleInstances(2);
+    toList(instanceCollection.getJsonArray(INSTANCES_KEY)).forEach(instance ->
+      assertFalse(instance.containsKey(METADATA_KEY)));
+
+    final var createCompleted = createInstancesBatchSync(instanceCollection);
+    assertThat(createCompleted.get(30, SECONDS), statusCodeIs(HttpStatus.HTTP_CREATED));
+
+    toList(instanceCollection.getJsonArray(INSTANCES_KEY)).forEach(this::assertMetadataExists);
   }
 
   @Test
@@ -2972,5 +2984,12 @@ public class InstanceStorageTest extends TestBaseWithInventoryUtil {
 
   private void assertSuppressedFromDiscovery(String id) {
     assertThat(getById(id).getJson().getBoolean(DISCOVERY_SUPPRESS), is(true));
+  }
+
+  private void assertMetadataExists(JsonObject instance) {
+    var metadata = getById(instance.getString("id")).getJson().getJsonObject(METADATA_KEY);
+    assertNotNull(metadata);
+    assertNotNull(metadata.getString("createdDate"));
+    assertNotNull(metadata.getString("updatedDate"));
   }
 }
